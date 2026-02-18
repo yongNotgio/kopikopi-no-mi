@@ -1,0 +1,275 @@
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.dash-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dash-header h1 {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.dash-date {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+.dash-date span {
+  color: var(--text-light);
+}
+
+.btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: var(--primary);
+  color: var(--text-white);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  transition: var(--transition);
+}
+
+.btn-primary:hover {
+  background: var(--primary-light);
+  box-shadow: var(--shadow-md);
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--shadow);
+  transition: var(--transition);
+}
+
+.stat-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-card--farms .stat-icon { background: #dcfce7; color: var(--primary); }
+.stat-card--clusters .stat-icon { background: #e0f2fe; color: #0284c7; }
+.stat-card--trees .stat-icon { background: #fef9c3; color: #ca8a04; }
+.stat-card--harvest .stat-icon { background: #fce7f3; color: #db2777; }
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 20px;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.empty-illustration {
+  color: var(--accent);
+  margin-bottom: 20px;
+  opacity: 0.6;
+}
+
+.empty-state h3 {
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+.empty-state p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  max-width: 400px;
+  margin-bottom: 24px;
+}
+
+/* Farms Section */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+
+.farms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.farm-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: var(--transition);
+  border: 1px solid var(--border-light);
+}
+
+.farm-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary);
+  transform: translateY(-2px);
+}
+
+.farm-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.farm-card-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--primary-dark);
+}
+
+.farm-card-header svg {
+  color: var(--text-light);
+}
+
+.farm-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.farm-detail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.farm-detail svg {
+  color: var(--primary-lighter);
+}
+
+.farm-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-light);
+}
+
+.cluster-badge {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: #dcfce7;
+  color: var(--primary);
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+.harvest-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 4px 10px;
+  background: #fef3c7;
+  color: #b45309;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+/* Stage Overview */
+.stage-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.stage-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  box-shadow: var(--shadow);
+  border-bottom: 3px solid transparent;
+}
+
+.stage-card--seed-sapling { border-bottom-color: #86efac; }
+.stage-card--tree { border-bottom-color: #34d399; }
+.stage-card--flowering { border-bottom-color: #fbbf24; }
+.stage-card--ready-to-harvest { border-bottom-color: #f87171; }
+
+.stage-emoji {
+  font-size: 28px;
+}
+
+.stage-count {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.stage-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .stage-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
