@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useFarm } from '../../context/FarmContext'
 import { X } from 'lucide-react'
+import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import '../FarmFormModal/FarmFormModal.css'
 
 export default function ClusterFormModal({ onClose, editData }) {
@@ -13,6 +14,16 @@ export default function ClusterFormModal({ onClose, editData }) {
       plantStage: 'seed-sapling',
     }
   )
+  const [isDirty, setIsDirty] = useState(false)
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false)
+
+  useEffect(() => {
+    // Track if form has been modified
+    const initialData = editData || { clusterName: '', areaSize: '', plantCount: '', plantStage: 'seed-sapling' }
+    const hasChanges = JSON.stringify(form) !== JSON.stringify(initialData)
+    setIsDirty(hasChanges)
+  }, [form, editData])
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
@@ -21,6 +32,10 @@ export default function ClusterFormModal({ onClose, editData }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.clusterName || !form.areaSize || !form.plantCount) return
+    setShowSaveConfirm(true)
+  }
+
+  const doSave = async () => {
     if (editData) {
       await updateCluster(editData.id, form)
     } else {
@@ -29,12 +44,20 @@ export default function ClusterFormModal({ onClose, editData }) {
     onClose()
   }
 
+  const handleClose = () => {
+    if (isDirty) {
+      setShowDiscardConfirm(true)
+    } else {
+      onClose()
+    }
+  }
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={handleClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{editData ? 'Edit Cluster' : 'Add New Cluster'}</h3>
-          <button className="modal-close" onClick={onClose}>
+          <button className="modal-close" onClick={handleClose}>
             <X size={20} />
           </button>
         </div>
@@ -53,7 +76,7 @@ export default function ClusterFormModal({ onClose, editData }) {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Area Size (hectares) *</label>
+              <label>Area Size (sqm) *</label>
               <input
                 name="areaSize"
                 type="number"
@@ -88,13 +111,35 @@ export default function ClusterFormModal({ onClose, editData }) {
           </div>
 
           <div className="modal-actions">
-            <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn-secondary" onClick={handleClose}>Cancel</button>
             <button type="submit" className="btn-primary">
               {editData ? 'Update Cluster' : 'Add Cluster'}
             </button>
           </div>
         </form>
       </div>
+
+      <ConfirmDialog
+        isOpen={showSaveConfirm}
+        onClose={() => setShowSaveConfirm(false)}
+        onConfirm={doSave}
+        title={editData ? 'Update Cluster?' : 'Add Cluster?'}
+        message={editData ? `Save changes to "${form.clusterName}"?` : `Add "${form.clusterName}" as a new cluster?`}
+        confirmText={editData ? 'Update' : 'Add Cluster'}
+        cancelText="Go Back"
+        variant="success"
+      />
+
+      <ConfirmDialog
+        isOpen={showDiscardConfirm}
+        onClose={() => setShowDiscardConfirm(false)}
+        onConfirm={onClose}
+        title="Discard Changes?"
+        message="You have unsaved changes. Are you sure you want to close this form? All changes will be lost."
+        confirmText="Discard"
+        cancelText="Keep Editing"
+        variant="warning"
+      />
     </div>
   )
 }

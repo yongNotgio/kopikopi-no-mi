@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save } from 'lucide-react'
 import { useFarm } from '../../context/FarmContext'
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import './ClusterDetail.css'
 
 const STAGE_OPTIONS = [
@@ -11,53 +12,70 @@ const STAGE_OPTIONS = [
   { value: 'ready-to-harvest', label: 'Ready to Harvest' },
 ]
 
+const VARIETY_OPTIONS = ['Robusta', 'Arabica', 'Liberica', 'Excelsa', 'Others']
+const FERTILIZER_TYPE_OPTIONS = ['Organic', 'Non-Organic']
+const FERTILIZER_FREQ_OPTIONS = [
+  { value: 'Often', label: 'Often — 3–4 times a year' },
+  { value: 'Sometimes', label: 'Sometimes — Once every year' },
+  { value: 'Rarely', label: 'Rarely — Once every 2–3 years' },
+  { value: 'Never', label: 'Never' },
+]
+const PESTICIDE_TYPE_OPTIONS = ['Organic', 'Non-Organic']
+const PESTICIDE_FREQ_OPTIONS = [
+  { value: 'Often', label: 'Often — Every 4–6 weeks' },
+  { value: 'Sometimes', label: 'Sometimes — 1–2 times a year' },
+  { value: 'Rarely', label: 'Rarely — Once every few years' },
+  { value: 'Never', label: 'Never' },
+]
+const SHADE_TREE_OPTIONS = ['Yes', 'No']
+
 const SECTION_FIELDS = {
   overview: [
     { name: 'datePlanted', label: 'Date Planted', type: 'date' },
     { name: 'numberOfPlants', label: 'Number of Plants', type: 'number' },
-    { name: 'variety', label: 'Variety', type: 'text' },
-    { name: 'monthlyTemperature', label: 'Monthly Temperature (deg C)', type: 'number' },
-    { name: 'rainfall', label: 'Monthly Rainfall (mm)', type: 'number' },
-    { name: 'humidity', label: 'Monthly Humidity (%)', type: 'number' },
-    { name: 'soilPh', label: 'Soil pH', type: 'number', step: '0.1' },
+    { name: 'variety', label: 'Variety', type: 'select', options: VARIETY_OPTIONS },
+    { name: 'monthlyTemperature', label: 'Average Monthly Temperature (°C)', type: 'number' },
+    { name: 'rainfall', label: 'Average Monthly Rainfall (mm)', type: 'number' },
+    { name: 'humidity', label: 'Average Monthly Humidity (%)', type: 'number' },
+    { name: 'soilPh', label: 'Soil pH (0–14)', type: 'number', step: '0.1', min: '0', max: '14' },
   ],
   harvest: [
     { name: 'lastHarvestedDate', label: 'Last Harvested Date', type: 'date' },
     { name: 'harvestDate', label: 'Harvest Date', type: 'date' },
     { name: 'estimatedHarvestDate', label: 'Estimated Harvest Date', type: 'date' },
-    { name: 'harvestSeason', label: 'Harvest Season', type: 'text' },
+    { name: 'harvestSeason', label: 'Date & Season of Harvest', type: 'text' },
     { name: 'previousYield', label: 'Previous Yield (kg)', type: 'number' },
     { name: 'predictedYield', label: 'Predicted Yield (kg)', type: 'number' },
-    { name: 'currentYield', label: 'Current Harvest (kg)', type: 'number' },
-    { name: 'gradeFine', label: 'Grade Fine (%)', type: 'number' },
-    { name: 'gradePremium', label: 'Grade Premium (%)', type: 'number' },
-    { name: 'gradeCommercial', label: 'Grade Commercial (%)', type: 'number' },
-    { name: 'preLastHarvestDate', label: 'Previous Last Harvest Date', type: 'date' },
-    { name: 'preTotalTrees', label: 'Previous Total Trees', type: 'number' },
-    { name: 'preYieldKg', label: 'Previous Yield (kg)', type: 'number' },
-    { name: 'preGradeFine', label: 'Previous Fine Grade (kg)', type: 'number' },
-    { name: 'preGradePremium', label: 'Previous Premium Grade (kg)', type: 'number' },
-    { name: 'preGradeCommercial', label: 'Previous Commercial Grade (kg)', type: 'number' },
-    { name: 'postCurrentYield', label: 'Predicted Yield (kg)', type: 'number' },
-    { name: 'postGradeFine', label: 'Predicted Fine (%)', type: 'number' },
-    { name: 'postGradePremium', label: 'Predicted Premium (%)', type: 'number' },
-    { name: 'postGradeCommercial', label: 'Predicted Commercial (%)', type: 'number' },
-    { name: 'defectCount', label: 'Defect Count', type: 'number' },
-    { name: 'beanMoisture', label: 'Bean Moisture (%)', type: 'number' },
-    { name: 'beanScreenSize', label: 'Bean Screen Size', type: 'text' },
+    { name: 'currentYield', label: 'Current/Actual Yield (kg)', type: 'number' },
+    { name: 'gradeFine', label: 'Grade: Fine (%)', type: 'number' },
+    { name: 'gradePremium', label: 'Grade: Premium (%)', type: 'number' },
+    { name: 'gradeCommercial', label: 'Grade: Commercial (%)', type: 'number' },
+    { name: 'preLastHarvestDate', label: 'Pre-Harvest: Last Harvest Date', type: 'date' },
+    { name: 'preTotalTrees', label: 'Pre-Harvest: Total Trees', type: 'number' },
+    { name: 'preYieldKg', label: 'Pre-Harvest: Yielded Coffee (kg)', type: 'number' },
+    { name: 'preGradeFine', label: 'Pre-Harvest: Fine Grade (kg)', type: 'number' },
+    { name: 'preGradePremium', label: 'Pre-Harvest: Premium Grade (kg)', type: 'number' },
+    { name: 'preGradeCommercial', label: 'Pre-Harvest: Commercial Grade (kg)', type: 'number' },
+    { name: 'postCurrentYield', label: 'Post-Harvest: Current Yield (kg)', type: 'number' },
+    { name: 'postGradeFine', label: 'Post-Harvest: Fine (%)', type: 'number' },
+    { name: 'postGradePremium', label: 'Post-Harvest: Premium (%)', type: 'number' },
+    { name: 'postGradeCommercial', label: 'Post-Harvest: Commercial (%)', type: 'number' },
+    { name: 'defectCount', label: 'Post-Harvest: Defect Count', type: 'number' },
+    { name: 'beanMoisture', label: 'Post-Harvest: Bean Moisture Content (%)', type: 'number' },
+    { name: 'beanScreenSize', label: 'Post-Harvest: Bean Screen Size', type: 'text' },
   ],
   pruning: [
     { name: 'lastPrunedDate', label: 'Last Pruned Date', type: 'date' },
-    { name: 'shadeTrees', label: 'Shade Trees', type: 'select', options: ['Yes', 'No'] },
+    { name: 'shadeTrees', label: 'Presence of Shade Trees', type: 'select', options: SHADE_TREE_OPTIONS },
   ],
   fertilize: [
-    { name: 'fertilizerFrequency', label: 'Fertilizer Frequency', type: 'text' },
-    { name: 'fertilizerType', label: 'Fertilizer Type', type: 'text' },
-    { name: 'soilPh', label: 'Soil pH', type: 'number', step: '0.1' },
+    { name: 'fertilizerType', label: 'Fertilizer Type', type: 'select', options: FERTILIZER_TYPE_OPTIONS },
+    { name: 'fertilizerFrequency', label: 'Application Frequency', type: 'select-labeled', options: FERTILIZER_FREQ_OPTIONS },
+    { name: 'soilPh', label: 'Soil pH (0–14)', type: 'number', step: '0.1', min: '0', max: '14' },
   ],
   pesticide: [
-    { name: 'pesticideType', label: 'Pesticide Type', type: 'text' },
-    { name: 'pesticideFrequency', label: 'Pesticide Frequency', type: 'text' },
+    { name: 'pesticideType', label: 'Pesticide Type', type: 'select', options: PESTICIDE_TYPE_OPTIONS },
+    { name: 'pesticideFrequency', label: 'Application Frequency', type: 'select-labeled', options: PESTICIDE_FREQ_OPTIONS },
   ],
 }
 
@@ -83,6 +101,7 @@ export default function ClusterDetail() {
   const cluster = getCluster(clusterId)
   const [form, setForm] = useState({})
   const [saving, setSaving] = useState(false)
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false)
   const isHarvestSection = section === 'harvest'
   const isReadyToHarvest = cluster?.plantStage === 'ready-to-harvest'
   const isHarvestLocked = isHarvestSection && !isReadyToHarvest
@@ -135,8 +154,12 @@ export default function ClusterDetail() {
     await updateCluster(cluster.id, updates)
   }
 
-  const handleSave = async (e) => {
+  const handleSave = (e) => {
     e.preventDefault()
+    setShowSaveConfirm(true)
+  }
+
+  const doSave = async () => {
     setSaving(true)
     await updateCluster(cluster.id, {
       stageData: {
@@ -195,11 +218,27 @@ export default function ClusterDetail() {
                       </option>
                     ))}
                   </select>
+                ) : field.type === 'select-labeled' ? (
+                  <select
+                    name={field.name}
+                    value={form[field.name] ?? ''}
+                    onChange={handleFieldChange}
+                    disabled={isHarvestLocked}
+                  >
+                    <option value="">Select...</option>
+                    {field.options.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 ) : (
                   <input
                     name={field.name}
                     type={field.type}
                     step={field.step}
+                    min={field.min}
+                    max={field.max}
                     value={form[field.name] ?? ''}
                     onChange={handleFieldChange}
                     placeholder={field.label}
@@ -216,6 +255,17 @@ export default function ClusterDetail() {
           </div>
         </form>
       </div>
+
+      <ConfirmDialog
+        isOpen={showSaveConfirm}
+        onClose={() => setShowSaveConfirm(false)}
+        onConfirm={doSave}
+        title="Save Changes?"
+        message={`Save the updated data for "${cluster.clusterName}"?`}
+        confirmText="Save"
+        cancelText="Go Back"
+        variant="success"
+      />
     </div>
   )
 }

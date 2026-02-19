@@ -32,19 +32,37 @@ export default function Login() {
 
     setIsLoggingIn(true)
 
-    // Pass the selected role to login for STRICT verification
-    const result = await login(identifier, password, loginAs)
+    try {
+      // Safety timeout: if login hangs (e.g. RLS-blocked query), recover after 15s
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 15000)
+      )
 
-    if (result.success) {
-      // Navigate based on the ACTUAL DB role returned, not the toggle
-      if (result.role === 'admin') {
-        navigate('/admin/dashboard', { replace: true })
-      } else {
-        navigate('/dashboard', { replace: true })
+      const result = await Promise.race([
+        login(identifier, password, loginAs),
+        timeoutPromise,
+      ])
+
+      if (result.success) {
+        // Navigate based on the ACTUAL DB role returned, not the toggle
+        if (result.role === 'admin') {
+          navigate('/admin/dashboard', { replace: true })
+        } else {
+          navigate('/dashboard', { replace: true })
+        }
+        return // keep loading screen during navigation
       }
-    } else {
-      setIsLoggingIn(false)
+    } catch (err) {
+      if (err.message === 'timeout') {
+        setError('Login is taking too long. Please check your connection and try again.')
+      } else {
+        console.error('Login error:', err)
+        setError('An unexpected error occurred. Please try again.')
+      }
     }
+
+    // Always clear loading on failure
+    setIsLoggingIn(false)
   }
 
   const handleAdminFormChange = (e) => {

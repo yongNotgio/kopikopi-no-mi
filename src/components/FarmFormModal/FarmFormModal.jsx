@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useFarm } from '../../context/FarmContext'
 import { X } from 'lucide-react'
+import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import './FarmFormModal.css'
 
 export default function FarmFormModal({ onClose, editData }) {
-  const { addFarm, updateFarm } = useFarm()
+  const { setFarmInfo } = useFarm()
   const [form, setForm] = useState(
     editData || {
       farmName: '',
@@ -14,28 +15,47 @@ export default function FarmFormModal({ onClose, editData }) {
       overallTreeCount: '',
     }
   )
+  const [isDirty, setIsDirty] = useState(false)
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false)
+
+  useEffect(() => {
+    const initialData = editData || { farmName: '', farmArea: '', elevation: '', plantVariety: '', overallTreeCount: '' }
+    // Compare only the fields we care about (ignore id)
+    const compare = (obj) => ({ farmName: obj.farmName, farmArea: obj.farmArea, elevation: obj.elevation, plantVariety: obj.plantVariety, overallTreeCount: obj.overallTreeCount })
+    const hasChanges = JSON.stringify(compare(form)) !== JSON.stringify(compare(initialData))
+    setIsDirty(hasChanges)
+  }, [form, editData])
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.farmName || !form.farmArea) return
-    if (editData) {
-      updateFarm(editData.id, form)
-    } else {
-      addFarm(form)
-    }
+    setShowSaveConfirm(true)
+  }
+
+  const doSave = async () => {
+    await setFarmInfo(form)
     onClose()
   }
 
+  const handleClose = () => {
+    if (isDirty) {
+      setShowDiscardConfirm(true)
+    } else {
+      onClose()
+    }
+  }
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={handleClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{editData ? 'Edit Farm' : 'Register New Farm'}</h3>
-          <button className="modal-close" onClick={onClose}>
+          <button className="modal-close" onClick={handleClose}>
             <X size={20} />
           </button>
         </div>
@@ -66,7 +86,7 @@ export default function FarmFormModal({ onClose, editData }) {
               />
             </div>
             <div className="form-group">
-              <label>Elevation (meters)</label>
+              <label>Elevation (MASL)</label>
               <input
                 name="elevation"
                 type="number"
@@ -102,7 +122,7 @@ export default function FarmFormModal({ onClose, editData }) {
           </div>
 
           <div className="modal-actions">
-            <button type="button" className="btn-secondary" onClick={onClose}>
+            <button type="button" className="btn-secondary" onClick={handleClose}>
               Cancel
             </button>
             <button type="submit" className="btn-primary">
@@ -111,6 +131,28 @@ export default function FarmFormModal({ onClose, editData }) {
           </div>
         </form>
       </div>
+
+      <ConfirmDialog
+        isOpen={showSaveConfirm}
+        onClose={() => setShowSaveConfirm(false)}
+        onConfirm={doSave}
+        title={editData ? 'Update Farm?' : 'Register Farm?'}
+        message={editData ? `Save changes to "${form.farmName}"?` : `Register "${form.farmName}" as your farm?`}
+        confirmText={editData ? 'Update Farm' : 'Register'}
+        cancelText="Go Back"
+        variant="success"
+      />
+
+      <ConfirmDialog
+        isOpen={showDiscardConfirm}
+        onClose={() => setShowDiscardConfirm(false)}
+        onConfirm={onClose}
+        title="Discard Changes?"
+        message="You have unsaved changes. Are you sure you want to close this form? All changes will be lost."
+        confirmText="Discard"
+        cancelText="Keep Editing"
+        variant="warning"
+      />
     </div>
   )
 }

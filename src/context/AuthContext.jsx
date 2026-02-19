@@ -1,21 +1,35 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import localforage from 'localforage'
+import {
+  saveUserSession,
+  loadUserSession,
+  clearUserSession,
+  hasStoredSession,
+} from '../lib/sessionStorage'
 
 const AuthContext = createContext(null)
 
-// Configure localforage to use IndexedDB
-const sessionStore = localforage.createInstance({
-  name: 'ikape-session',
-  storeName: 'auth',
-  description: 'Persistent session storage for IKAPE',
-})
+// Synchronously hydrate from localStorage so there's ZERO loading delay
+function getInitialAuth() {
+  const restored = loadUserSession()
+  if (restored?.user && restored?.profile) {
+    return { user: restored.user, profile: restored.profile }
+  }
+  return { user: null, profile: null }
+}
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const initial = getInitialAuth()
+  const [user, setUser] = useState(initial.user)
+  const [profile, setProfile] = useState(initial.profile)
+  const [loading, setLoading] = useState(false) // never loading — instant render
   const [error, setError] = useState('')
+  const userRef = useRef(initial.user)
+
+  // Keep ref in sync with user state
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
 
   // Fetch user profile from the users table
   const fetchProfile = async (userId) => {
@@ -31,110 +45,143 @@ export function AuthProvider({ children }) {
     return data
   }
 
-  // ===== IndexedDB Session Persistence =====
-  const saveSession = async (userData, profileData) => {
-    try {
-      await sessionStore.setItem('user', userData)
-      await sessionStore.setItem('profile', profileData)
-      await sessionStore.setItem('timestamp', Date.now())
-      console.log('💾 Session saved to IndexedDB')
-    } catch (err) {
-      console.error('Failed to save session:', err)
-    }
-  }
-
-  const clearSession = async () => {
-    try {
-      await sessionStore.removeItem('user')
-      await sessionStore.removeItem('profile')
-      await sessionStore.removeItem('timestamp')
-      console.log('🗑️ Session cleared from IndexedDB')
-    } catch (err) {
-      console.error('Failed to clear session:', err)
-    }
-  }
-
-  const restoreSession = async () => {
-    try {
-      const savedUser = await sessionStore.getItem('user')
-      const savedProfile = await sessionStore.getItem('profile')
-      const savedTimestamp = await sessionStore.getItem('timestamp')
-
-      if (!savedUser || !savedProfile || !savedTimestamp) return false
-
-      // 24-hour expiry
-      const SESSION_MAX_AGE = 24 * 60 * 60 * 1000
-      if (Date.now() - savedTimestamp > SESSION_MAX_AGE) {
-        console.log('⏰ IndexedDB session expired')
-        await clearSession()
-        return false
-      }
-
-      // Re-validate role from DB to prevent tampering
-      const freshProfile = await fetchProfile(savedUser.id)
-      if (!freshProfile) {
-        console.log('❌ User no longer exists in DB, clearing session')
-        await clearSession()
-        return false
-      }
-
-      // Use fresh profile data (role may have changed)
-      console.log('📦 Session restored from IndexedDB for:', freshProfile.username, '| role:', freshProfile.role)
-      setUser(savedUser)
-      setProfile(freshProfile)
-      // Update stored profile with fresh data
-      await saveSession(savedUser, freshProfile)
-      return true
-    } catch (err) {
-      console.error('Failed to restore session:', err)
-      return false
-    }
-  }
-
   // ===== Session Initialization =====
   useEffect(() => {
-    const initSession = async () => {
-      // 1. Try Supabase auth session first
-      const { data: { session } } = await supabase.auth.getSession()
+    let isMounted = true
 
-      if (session?.user) {
-        setUser(session.user)
-        const p = await fetchProfile(session.user.id)
-        if (p) {
-          setProfile(p)
-          await saveSession(session.user, p)
-        }
-      } else {
-        // 2. Fallback to IndexedDB
-        const restored = await restoreSession()
-        if (!restored) {
-          console.log('🔑 No active session — user needs to log in')
-        }
+    const initializeAuth = async () => {
+      // If no stored session, we already set loading=false — just bail
+      if (!hasStoredSession()) {
+        console.log('🔑 No stored session — redirecting to login')
+        if (isMounted) setLoading(false)
+        return
       }
 
-      setLoading(false)
+      try {
+        // 1. Try Supabase auth session first
+        console.log('🔄 Checking Supabase auth session...')
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+        if (sessionError) {
+          console.error('⚠️ getSession error:', sessionError.message)
+        }
+
+        if (session?.user) {
+          console.log('✅ Supabase session found for:', session.user.email)
+          if (isMounted) {
+            setUser(session.user)
+            const p = await fetchProfile(session.user.id)
+            if (isMounted && p) {
+              setProfile(p)
+              saveUserSession(session.user, p)
+            }
+          }
+        } else {
+          // 2. Fallback to localStorage
+          console.log('⚠️ No Supabase session — falling back to localStorage')
+          const restored = loadUserSession()
+          if (restored) {
+            console.log('📦 Found stored session for user ID:', restored.user.id)
+            // Try to re-validate role from DB
+            let freshProfile = null
+            try {
+              freshProfile = await fetchProfile(restored.user.id)
+            } catch (fetchErr) {
+              console.warn('⚠️ fetchProfile threw error (likely RLS):', fetchErr.message)
+            }
+
+            if (freshProfile && isMounted) {
+              console.log('✅ Session restored + re-validated for:', freshProfile.username, '| role:', freshProfile.role)
+              setUser(restored.user)
+              setProfile(freshProfile)
+              saveUserSession(restored.user, freshProfile)
+            } else if (restored.profile && isMounted) {
+              // fetchProfile failed (RLS / network) but we have a cached profile
+              // Use it as-is — this keeps the session alive for dev-bypass logins
+              console.log('📦 Using cached profile from localStorage (DB unreachable):', restored.profile.username, '| role:', restored.profile.role)
+              setUser(restored.user)
+              setProfile(restored.profile)
+            } else {
+              console.log('❌ No valid session data available. Clearing session.')
+              clearUserSession()
+            }
+          } else {
+            console.log('🔑 No active session — user needs to log in')
+          }
+        }
+      } catch (err) {
+        console.error('Auth initialization error:', err)
+        if (isMounted) {
+          setUser(null)
+          setProfile(null)
+        }
+      } finally {
+        if (isMounted) {
+          console.log('🏁 Auth initialization complete, setting loading=false')
+          setLoading(false)
+        }
+      }
     }
 
-    initSession()
+    // Safety timeout: if auth initialization hangs for more than 10s,
+    // force loading=false to prevent infinite loading screen
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted) {
+        console.warn('⏰ Auth initialization timed out after 10s — forcing loading=false')
+        setLoading(false)
+      }
+    }, 10000)
 
+    initializeAuth().finally(() => clearTimeout(safetyTimeout))
+
+    // Subscribe to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (session?.user) {
-          setUser(session.user)
-          const p = await fetchProfile(session.user.id)
-          if (p) {
-            setProfile(p)
-            await saveSession(session.user, p)
+        if (!isMounted) return
+
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session?.user) {
+            setUser(session.user)
+            const p = await fetchProfile(session.user.id)
+            if (isMounted) {
+              setProfile(p)
+            }
+            if (p) saveUserSession(session.user, p)
           }
         } else if (event === 'SIGNED_OUT') {
           setUser(null)
           setProfile(null)
-          await clearSession()
+          clearUserSession()
+        } else if (event === 'USER_UPDATED') {
+          if (session?.user) {
+            setUser(session.user)
+            const p = await fetchProfile(session.user.id)
+            if (isMounted) {
+              setProfile(p)
+            }
+            if (p) saveUserSession(session.user, p)
+          }
         }
       }
     )
 
-    return () => subscription.unsubscribe()
+    // Re-check session when window regains focus
+    const handleFocus = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user && !userRef.current) {
+        setUser(session.user)
+        const p = await fetchProfile(session.user.id)
+        setProfile(p)
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+      window.removeEventListener('focus', handleFocus)
+    }
   }, [])
 
   // Log currently logged in user
@@ -156,16 +203,19 @@ export function AuthProvider({ children }) {
       password: userData.password,
     })
 
-    if (authError) { setError(authError.message); return false }
+    if (authError) { setError(authError.message); return { success: false } }
 
     const userId = authData.user?.id
-    if (!userId) { setError('Registration failed. Please try again.'); return false }
+    if (!userId) { setError('Registration failed. Please try again.'); return { success: false } }
+
+    // Check if Supabase returned a fake session (email already exists in auth)
+    const requiresConfirmation = !authData.session
 
     const { data: existing } = await supabase.from('users').select('id').eq('email', userData.email).maybeSingle()
-    if (existing) { setError('An account with this email already exists.'); return false }
+    if (existing) { setError('An account with this email already exists.'); return { success: false } }
 
     const { data: takenUsername } = await supabase.from('users').select('id').eq('username', userData.username).maybeSingle()
-    if (takenUsername) { setError('Username is already taken.'); return false }
+    if (takenUsername) { setError('Username is already taken.'); return { success: false } }
 
     const { error: profileError } = await supabase.from('users').upsert({
       id: userId,
@@ -182,8 +232,8 @@ export function AuthProvider({ children }) {
       role: 'farmer',
     }, { onConflict: 'id' })
 
-    if (profileError) { setError(profileError.message); return false }
-    return true
+    if (profileError) { setError(profileError.message); return { success: false } }
+    return { success: true, requiresConfirmation }
   }
 
   const registerAdmin = async (userData) => {
@@ -198,6 +248,9 @@ export function AuthProvider({ children }) {
 
     const userId = authData.user?.id
     if (!userId) { setError('Registration failed. Please try again.'); return false }
+
+    const { data: existingEmail } = await supabase.from('users').select('id').eq('email', userData.email).maybeSingle()
+    if (existingEmail) { setError('An account with this email already exists.'); return false }
 
     const { data: takenUsername } = await supabase.from('users').select('id').eq('username', userData.username).maybeSingle()
     if (takenUsername) { setError('Username is already taken.'); return false }
@@ -225,109 +278,116 @@ export function AuthProvider({ children }) {
   const login = async (identifier, password, expectedRole) => {
     setError('')
 
-    let email = identifier
+    try {
+      let email = identifier
 
-    // Resolve username to email
-    if (!identifier.includes('@')) {
-      const { data: found, error: lookupError } = await supabase
+      // Resolve username to email
+      if (!identifier.includes('@')) {
+        const { data: found, error: lookupError } = await supabase
+          .from('users')
+          .select('email')
+          .eq('username', identifier)
+          .maybeSingle()
+
+        if (lookupError) {
+          setError('Could not look up username. Try using your email.')
+          return { success: false }
+        }
+        if (!found) {
+          setError('Username not found')
+          return { success: false }
+        }
+        email = found.email
+      }
+
+      // STEP 1: Look up profile BEFORE authenticating
+      const { data: profileData, error: profileLookupErr } = await supabase
         .from('users')
-        .select('email')
-        .eq('username', identifier)
+        .select('*')
+        .eq('email', email)
         .maybeSingle()
 
-      if (lookupError) {
-        setError('Could not look up username. Try using your email.')
+      if (profileLookupErr || !profileData) {
+        setError('No account found with that email/username.')
         return { success: false }
       }
-      if (!found) {
-        setError('Username not found')
+
+      // STEP 2: STRICT ROLE CHECK — database role column is KING
+      const dbRole = profileData.role || 'farmer'
+      if (expectedRole && dbRole !== expectedRole) {
+        setError('⚠️ Invalid credentials for this login type. Please check your username and password, or try the other login option.')
         return { success: false }
       }
-      email = found.email
-    }
 
-    // ===== STEP 1: Look up profile BEFORE authenticating =====
-    // Check if user exists in the DB and verify role
-    const { data: profileData, error: profileLookupErr } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .maybeSingle()
+      // STEP 3: Authenticate with Supabase
+      const { error: loginError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (profileLookupErr || !profileData) {
-      setError('No account found with that email/username.')
-      return { success: false }
-    }
-
-    // ===== STEP 2: STRICT ROLE CHECK =====
-    // The database role column is KING
-    const dbRole = profileData.role || 'farmer'
-    if (expectedRole && dbRole !== expectedRole) {
-      if (expectedRole === 'admin') {
-        setError('⚠️ This account is not registered as an Admin. Please select "Farmer" to log in.')
-      } else {
-        setError('⚠️ This account is not registered as a Farmer. Please select "Admin" to log in.')
+      if (loginError) {
+        setError('Invalid credentials. Please check your username/email and password.')
+        return { success: false }
       }
-      return { success: false }
-    }
 
-    // ===== STEP 3: Authenticate with Supabase =====
-    const { error: loginError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+      // Supabase auth succeeded
+      const authUser = (await supabase.auth.getUser()).data.user
+      if (authUser) {
+        setUser(authUser)
+        setProfile(profileData)
+        saveUserSession(authUser, profileData)
+      }
 
-    if (loginError) {
-      // Dev bypass: accept any password but STILL enforce role
-      console.warn('⚡ Dev auth bypass active — role still enforced from DB')
-      const mockUser = { id: profileData.id, email: profileData.email }
-      setProfile(profileData)
-      setUser(mockUser)
-      await saveSession(mockUser, profileData)
       return { success: true, role: dbRole }
+    } catch (err) {
+      console.error('Login error:', err)
+      setError('An unexpected error occurred during login.')
+      return { success: false }
     }
-
-    // Supabase auth succeeded — the onAuthStateChange will handle setting user/profile
-    // But we also save explicitly for faster redirect
-    const authUser = (await supabase.auth.getUser()).data.user
-    if (authUser) {
-      setUser(authUser)
-      setProfile(profileData)
-      await saveSession(authUser, profileData)
-    }
-
-    return { success: true, role: dbRole }
   }
 
   // ===== Logout =====
   const logout = async () => {
-    await supabase.auth.signOut()
+    // Clear local state FIRST so route guards react instantly
     setUser(null)
     setProfile(null)
-    await clearSession()
+    clearUserSession()
+    // Then attempt Supabase signOut (non-blocking, may fail for dev-bypass sessions)
+    try {
+      await supabase.auth.signOut()
+    } catch (e) {
+      console.warn('Supabase signOut failed (expected for dev-bypass sessions):', e.message)
+    }
   }
 
   // ===== Update Profile =====
   const updateProfile = async (updates) => {
     if (!user) return false
-    const { error: err } = await supabase
-      .from('users')
-      .update({
-        first_name: updates.firstName,
-        last_name: updates.lastName,
-        email: updates.email,
-        contact_number: updates.contactNumber,
-        municipality: updates.municipality,
-        province: updates.province,
-      })
-      .eq('id', user.id)
+    try {
+      const { error: err } = await supabase
+        .from('users')
+        .update({
+          first_name: updates.firstName,
+          middle_initial: updates.middleInitial,
+          last_name: updates.lastName,
+          age: updates.age ? Number(updates.age) : null,
+          email: updates.email,
+          contact_number: updates.contactNumber,
+          municipality: updates.municipality,
+          province: updates.province,
+        })
+        .eq('id', user.id)
 
-    if (err) { console.error('Error updating profile:', err.message); return false }
+      if (err) { console.error('Error updating profile:', err.message); return false }
 
-    const p = await fetchProfile(user.id)
-    setProfile(p)
-    if (p) await saveSession(user, p)
-    return true
+      const p = await fetchProfile(user.id)
+      setProfile(p)
+      if (p) saveUserSession(user, p)
+      return true
+    } catch (err) {
+      console.error('Update profile error:', err)
+      return false
+    }
   }
 
   // ===== Combined User Object =====

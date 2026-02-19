@@ -1,32 +1,48 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { User, Mail, Phone, MapPin, Save, LogOut } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Save, LogOut, Calendar } from 'lucide-react';
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog';
 import './Settings.css';
 
 export default function Settings() {
   const { user, logout, updateProfile } = useAuth();
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     firstName: user?.firstName || '',
+    middleInitial: user?.middleInitial || '',
     lastName: user?.lastName || '',
+    age: user?.age || '',
     email: user?.email || '',
     contactNumber: user?.contactNumber || '',
     municipality: user?.municipality || '',
     province: user?.province || '',
   });
   const [saved, setSaved] = useState(false);
+  const [logoutConfirm, setLogoutConfirm] = useState(false);
+  const [saveConfirm, setSaveConfirm] = useState(false);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
     setSaved(false);
   };
 
-  const handleSave = async (e) => {
+  const handleSave = (e) => {
     e.preventDefault();
+    setSaveConfirm(true);
+  };
+
+  const doSave = async () => {
     const success = await updateProfile(form);
     if (success) {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
   };
 
   return (
@@ -44,9 +60,43 @@ export default function Settings() {
           <div className="profile-avatar">
             <User size={40} />
           </div>
-          <h3>{user?.firstName} {user?.lastName}</h3>
+          <h3>
+            {user?.firstName}
+            {user?.middleInitial ? ` ${user.middleInitial}.` : ''}{' '}
+            {user?.lastName}
+          </h3>
           <span className="profile-username">@{user?.username}</span>
           <span className="profile-role">Farm Manager</span>
+
+          <div className="profile-details">
+            {user?.age && (
+              <div className="profile-detail-item">
+                <Calendar size={13} />
+                <span className="detail-label">Age</span>
+                <span className="detail-value">{user.age}</span>
+              </div>
+            )}
+            <div className="profile-detail-item">
+              <Mail size={13} />
+              <span className="detail-label">Email</span>
+              <span className="detail-value">{user?.email || '—'}</span>
+            </div>
+            <div className="profile-detail-item">
+              <Phone size={13} />
+              <span className="detail-label">Contact</span>
+              <span className="detail-value">{user?.contactNumber || '—'}</span>
+            </div>
+            <div className="profile-detail-item">
+              <MapPin size={13} />
+              <span className="detail-label">Municipality</span>
+              <span className="detail-value">{user?.municipality || '—'}</span>
+            </div>
+            <div className="profile-detail-item">
+              <MapPin size={13} />
+              <span className="detail-label">Province</span>
+              <span className="detail-value">{user?.province || '—'}</span>
+            </div>
+          </div>
         </div>
 
         {/* Edit Profile Form */}
@@ -65,12 +115,36 @@ export default function Settings() {
             </div>
 
             <div className="settings-field">
+              <label><User size={14} /> Middle Initial</label>
+              <input
+                name="middleInitial"
+                value={form.middleInitial}
+                onChange={handleChange}
+                placeholder="M.I."
+                maxLength={2}
+              />
+            </div>
+
+            <div className="settings-field">
               <label><User size={14} /> Last Name</label>
               <input
                 name="lastName"
                 value={form.lastName}
                 onChange={handleChange}
                 placeholder="Last Name"
+              />
+            </div>
+
+            <div className="settings-field">
+              <label><Calendar size={14} /> Age</label>
+              <input
+                name="age"
+                type="number"
+                min="1"
+                max="150"
+                value={form.age}
+                onChange={handleChange}
+                placeholder="Age"
               />
             </div>
 
@@ -129,11 +203,33 @@ export default function Settings() {
           <h2>Account</h2>
           <p className="settings-desc">Manage your account settings and session.</p>
 
-          <button className="btn-logout" onClick={logout}>
+          <button className="btn-logout" onClick={() => setLogoutConfirm(true)}>
             <LogOut size={16} /> Sign Out
           </button>
         </div>
       </div>
+      
+      <ConfirmDialog
+        isOpen={saveConfirm}
+        onClose={() => setSaveConfirm(false)}
+        onConfirm={doSave}
+        title="Save Profile?"
+        message="Save your updated profile information?"
+        confirmText="Save"
+        cancelText="Go Back"
+        variant="success"
+      />
+
+      <ConfirmDialog
+        isOpen={logoutConfirm}
+        onClose={() => setLogoutConfirm(false)}
+        onConfirm={handleLogout}
+        title="Confirm Logout"
+        message="Are you sure you want to log out? You will need to log in again to access your account."
+        confirmText="Log Out"
+        cancelText="Cancel"
+        variant="warning"
+      />
     </div>
   );
 }

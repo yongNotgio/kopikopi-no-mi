@@ -13,8 +13,13 @@ import {
   BarChart3,
   Trash2,
   CalendarDays,
+  Edit,
+  Mountain,
+  Ruler,
 } from 'lucide-react'
 import ClusterFormModal from '../../components/ClusterFormModal/ClusterFormModal'
+import FarmFormModal from '../../components/FarmFormModal/FarmFormModal'
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import './Dashboard.css'
 
 const STAGE_CONFIG = {
@@ -25,9 +30,13 @@ const STAGE_CONFIG = {
 }
 
 export default function Dashboard() {
-  const { clusters, deleteCluster } = useFarm()
+  const { farm, clusters, deleteCluster } = useFarm()
   const navigate = useNavigate()
   const [showClusterForm, setShowClusterForm] = useState(false)
+  const [showFarmForm, setShowFarmForm] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, clusterId: null, clusterName: '' })
+
+  const farmHasDetails = farm && farm.farm_name && farm.farm_name !== 'My Farm' && farm.farm_area
 
   const totalTrees = clusters.reduce((sum, c) => sum + (parseInt(c.plantCount) || 0), 0)
   const harvestReady = clusters.filter((c) => c.plantStage === 'ready-to-harvest').length
@@ -47,11 +56,60 @@ export default function Dashboard() {
             {dayName} <span>({dateStr})</span>
           </p>
         </div>
-        <button className="btn-primary" onClick={() => setShowClusterForm(true)}>
-          <Plus size={18} />
-          Add Cluster
-        </button>
+        <div className="dash-header-actions">
+          <button className="btn-secondary" onClick={() => setShowFarmForm(true)}>
+            <Edit size={16} />
+            {farmHasDetails ? 'Edit Farm' : 'Register Farm'}
+          </button>
+          {farmHasDetails && (
+            <button className="btn-primary" onClick={() => setShowClusterForm(true)}>
+              <Plus size={18} />
+              Add Cluster
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Farm Info Card */}
+      {!farmHasDetails ? (
+        <div className="farm-info-prompt">
+          <div className="farm-info-prompt-content">
+            <Leaf size={40} />
+            <h3>Register Your Farm</h3>
+            <p>Start by registering your farm details to begin managing clusters and tracking harvests.</p>
+            <button className="btn-primary" onClick={() => setShowFarmForm(true)}>
+              <Plus size={18} /> Register Farm Details
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="farm-info-card">
+          <div className="farm-info-header">
+            <h3>🌿 {farm.farm_name}</h3>
+            <button className="btn-icon" onClick={() => setShowFarmForm(true)} title="Edit Farm">
+              <Edit size={16} />
+            </button>
+          </div>
+          <div className="farm-info-details">
+            <div className="farm-info-item">
+              <Ruler size={14} />
+              <span>{farm.farm_area || '—'} hectares</span>
+            </div>
+            <div className="farm-info-item">
+              <Mountain size={14} />
+              <span>{farm.elevation || '—'} MASL</span>
+            </div>
+            <div className="farm-info-item">
+              <Coffee size={14} />
+              <span>{farm.plant_variety || '—'}</span>
+            </div>
+            <div className="farm-info-item">
+              <TreePine size={14} />
+              <span>{farm.overall_tree_count || '—'} trees</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="stats-grid">
@@ -96,7 +154,7 @@ export default function Dashboard() {
       </div>
 
       {/* Cluster List or Empty State */}
-      {clusters.length === 0 ? (
+      {farmHasDetails && clusters.length === 0 ? (
         <div className="empty-state">
           <div className="empty-illustration">
             <Leaf size={64} />
@@ -132,9 +190,11 @@ export default function Dashboard() {
                       title="Delete"
                       onClick={(e) => {
                         e.stopPropagation()
-                        if (window.confirm('Delete this cluster?')) {
-                          deleteCluster(cluster.id)
-                        }
+                        setDeleteConfirm({ 
+                          isOpen: true, 
+                          clusterId: cluster.id, 
+                          clusterName: cluster.clusterName 
+                        })
                       }}
                     >
                       <Trash2 size={14} />
@@ -147,7 +207,7 @@ export default function Dashboard() {
                     </div>
                     <div className="farm-detail">
                       <Layers size={14} />
-                      <span>{cluster.areaSize} hectares</span>
+                      <span>{cluster.areaSize} sqm</span>
                     </div>
                     <div className="farm-detail">
                       <Sprout size={14} />
@@ -203,8 +263,32 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-
+  
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => setDeleteConfirm({ isOpen: false, clusterId: null, clusterName: '' })}
+        onConfirm={() => deleteCluster(deleteConfirm.clusterId)}
+        title="Delete Cluster"
+        message={`Are you sure you want to delete "${deleteConfirm.clusterName}"? This action cannot be undone and all associated data will be permanently removed.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
+    
       {showClusterForm && <ClusterFormModal onClose={() => setShowClusterForm(false)} />}
+      {showFarmForm && (
+        <FarmFormModal
+          onClose={() => setShowFarmForm(false)}
+          editData={farm ? {
+            id: farm.id,
+            farmName: farm.farm_name || '',
+            farmArea: farm.farm_area || '',
+            elevation: farm.elevation || '',
+            plantVariety: farm.plant_variety || '',
+            overallTreeCount: farm.overall_tree_count || '',
+          } : null}
+        />
+      )}
     </div>
   )
 }
