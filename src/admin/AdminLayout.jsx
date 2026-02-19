@@ -14,6 +14,7 @@ import {
     ChevronDown,
     Clock,
 } from 'lucide-react'
+import ConfirmDialog from '../components/ConfirmDialog/ConfirmDialog'
 import './AdminLayout.css'
 
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
@@ -24,6 +25,7 @@ export default function AdminLayout() {
     const timeoutRef = useRef(null)
     const [showProfileMenu, setShowProfileMenu] = useState(false)
     const [lastActivity, setLastActivity] = useState(Date.now())
+    const [logoutConfirm, setLogoutConfirm] = useState(false)
 
     // Session timeout — auto logout after 30 min inactivity
     useEffect(() => {
@@ -90,7 +92,7 @@ export default function AdminLayout() {
                         <Clock size={14} />
                         <span>Session active</span>
                     </div>
-                    <button className="admin-logout-btn" onClick={handleLogout}>
+                    <button className="admin-logout-btn" onClick={() => setLogoutConfirm(true)}>
                         <LogOut size={20} />
                         <span>Log Out</span>
                     </button>
@@ -118,14 +120,14 @@ export default function AdminLayout() {
                             </div>
                             <div className="admin-user-details">
                                 <span className="admin-user-name">
-                                    Sir Ernesto
+                                    {user?.firstName} {user?.lastName}
                                 </span>
-                                <span className="admin-user-role">Quality Control Manager</span>
+                                <span className="admin-user-role">Administrator</span>
                             </div>
                             <ChevronDown size={16} className="admin-chevron" />
                             {showProfileMenu && (
                                 <div className="admin-profile-dropdown">
-                                    <button onClick={handleLogout}>
+                                    <button onClick={() => { setShowProfileMenu(false); setLogoutConfirm(true) }}>
                                         <LogOut size={16} /> Sign Out
                                     </button>
                                 </div>
@@ -138,6 +140,17 @@ export default function AdminLayout() {
                     <Outlet />
                 </div>
             </main>
+
+            <ConfirmDialog
+                isOpen={logoutConfirm}
+                onClose={() => setLogoutConfirm(false)}
+                onConfirm={handleLogout}
+                title="Confirm Logout"
+                message="Are you sure you want to log out? You will need to log in again to access your admin account."
+                confirmText="Log Out"
+                cancelText="Cancel"
+                variant="warning"
+            />
         </div>
     )
 }
