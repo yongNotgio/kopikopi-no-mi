@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { Sprout, Eye, EyeOff, CheckCircle } from 'lucide-react'
+import { Sprout, Eye, EyeOff, CheckCircle, Mail } from 'lucide-react'
 import '../Login/Login.css'
 
 export default function Register() {
@@ -20,6 +20,8 @@ export default function Register() {
   })
   const [showPassword, setShowPassword] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
+  const [requiresConfirmation, setRequiresConfirmation] = useState(false)
+  const [registeredEmail, setRegisteredEmail] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { register, error, setError } = useAuth()
   const navigate = useNavigate()
@@ -55,8 +57,9 @@ export default function Register() {
     try {
       const result = await register(form)
       if (result && result.success) {
+        setRegisteredEmail(form.email)
         if (result.requiresConfirmation) {
-          setSuccessMessage('Registration successful! Please check your email to confirm your account before logging in.')
+          setRequiresConfirmation(true)
         } else {
           setSuccessMessage('Registration successful! You can now log in with your credentials.')
         }
@@ -84,7 +87,45 @@ export default function Register() {
 
       <div className="auth-right">
         <div className="auth-form-container" style={{ maxWidth: 480 }}>
-          {successMessage ? (
+          {requiresConfirmation ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                width: 80, height: 80, borderRadius: '50%',
+                background: '#eff6ff', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', margin: '0 auto 20px'
+              }}>
+                <Mail size={40} color="#2563eb" />
+              </div>
+              <h2 style={{ marginBottom: 8 }}>Confirm Your Email</h2>
+              <p style={{ color: '#6b7280', marginBottom: 20, lineHeight: 1.6 }}>
+                We sent a confirmation link to:
+              </p>
+              <div style={{
+                background: '#f0f9ff', border: '1px solid #bae6fd',
+                borderRadius: 8, padding: '12px 16px', marginBottom: 20,
+                fontWeight: 600, color: '#0369a1', fontSize: 15,
+                wordBreak: 'break-all'
+              }}>
+                {registeredEmail}
+              </div>
+              <p style={{ color: '#6b7280', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
+                Click the link in the email to activate your account.
+                Once confirmed, you can log in with your credentials.
+                <br />
+                <br />
+                <span style={{ color: '#9ca3af' }}>
+                  Didn't receive it? Check your spam or junk folder.
+                </span>
+              </p>
+              <button
+                className="auth-btn"
+                style={{ width: '100%' }}
+                onClick={() => navigate('/login')}
+              >
+                Go to Login
+              </button>
+            </div>
+          ) : successMessage ? (
             <div style={{ textAlign: 'center' }}>
               <CheckCircle size={56} color="#16a34a" style={{ marginBottom: 16 }} />
               <h2 style={{ marginBottom: 8 }}>You're All Set!</h2>
