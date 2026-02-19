@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabase'
 import {
     Users,
     Sprout,
@@ -12,20 +11,25 @@ import {
     Bell,
     CheckSquare,
     ClipboardList,
-    ChevronRight,
     ArrowUpRight,
     ArrowDownRight,
     X,
+    Filter,
+    RefreshCw,
 } from 'lucide-react'
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-    ResponsiveContainer, PieChart, Pie, Cell,
+    ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar,
 } from 'recharts'
+import {
+    fetchAdminAnalytics,
+    RISK_COLORS,
+    GRADE_COLORS,
+    generateRecommendations,
+    exportToCSV,
+} from '../../lib/analyticsService'
 import './AdminDashboard.css'
-
-const RISK_COLORS = { Low: '#22c55e', Moderate: '#f59e0b', High: '#f97316', Critical: '#ef4444' }
-const GRADE_COLORS = ['#22c55e', '#3b82f6', '#f59e0b']
 
 export default function AdminDashboard() {
     const [stats, setStats] = useState({
@@ -40,157 +44,117 @@ export default function AdminDashboard() {
     const [yieldTrend, setYieldTrend] = useState([])
     const [gradeDistribution, setGradeDistribution] = useState([])
     const [selectedCluster, setSelectedCluster] = useState(null)
+    const [clusterRecommendations, setClusterRecommendations] = useState([])
     const [auditLogs, setAuditLogs] = useState([])
-    const [sortField, setSortField] = useState('riskLevel')
+    const [sortField, setSortField] = useState('priorityScore')
     const [sortDir, setSortDir] = useState('desc')
     const [selectedRows, setSelectedRows] = useState([])
     const [loading, setLoading] = useState(true)
+    const [seasonFilter, setSeasonFilter] = useState('all')
+    const [seasons, setSeasons] = useState([])
 
     // Dialog states
     const [bulkActionDialog, setBulkActionDialog] = useState({ open: false, action: '', count: 0 })
     const [assignDialog, setAssignDialog] = useState({ open: false, clusterName: '' })
     const [notifyDialog, setNotifyDialog] = useState({ open: false, clusterName: '' })
     const [exportDialog, setExportDialog] = useState(false)
+    const [refreshKey, setRefreshKey] = useState(0)
 
-    useEffect(() => {
-        fetchDashboardData()
-    }, [])
-
-    const fetchDashboardData = async () => {
-        setLoading(true)
-        try {
-            // Fetch total users (farmers)
-            const { data: users, error: usersErr } = await supabase
-                .from('users')
-                .select('id')
-                .eq('role', 'farmer')
-
-            // Fetch farms
-            const { data: farms, error: farmsErr } = await supabase
-                .from('farms')
-                .select('id, farm_name, farm_area, user_id')
-
-            // Fetch clusters with stage data
-            const { data: clusters, error: clustersErr } = await supabase
-                .from('clusters')
-                .select('*, cluster_stage_data(*), farms!inner(farm_name, user_id)')
-
-            // Fetch harvest records
-            const { data: harvests, error: harvestsErr } = await supabase
-                .from('harvest_records')
-                .select('*')
-
-            // Compute stats
-            const totalFarmers = users?.length || 0
-            const totalFarms = farms?.length || 0
-            const totalClusters = clusters?.length || 0
-
-            // Compute yields from cluster_stage_data
-            let predictedYield = 0
-            let actualYield = 0
-            let previousYield = 0
-            let gradeFine = 0, gradePremium = 0, gradeCommercial = 0
-
-            clusters?.forEach((c) => {
-                const sd = c.cluster_stage_data
-                if (sd) {
-                    predictedYield += parseFloat(sd.predicted_yield || 0)
-                    actualYield += parseFloat(sd.current_yield || 0)
-                    previousYield += parseFloat(sd.previous_yield || 0)
-                    gradeFine += parseFloat(sd.grade_fine || 0)
-                    gradePremium += parseFloat(sd.grade_premium || 0)
-                    gradeCommercial += parseFloat(sd.grade_commercial || 0)
-                }
-            })
-
-            setStats({
-                totalFarmers,
-                totalFarms,
-                totalClusters,
-                predictedYield: Math.round(predictedYield),
-                actualYield: Math.round(actualYield),
-                previousYield: Math.round(previousYield),
-            })
-
-            // Grade distribution for donut chart
-            const totalGrade = gradeFine + gradePremium + gradeCommercial
-            setGradeDistribution(totalGrade > 0 ? [
-                { name: 'Fine', value: Math.round(gradeFine), pct: ((gradeFine / totalGrade) * 100).toFixed(1) },
-                { name: 'Premium', value: Math.round(gradePremium), pct: ((gradePremium / totalGrade) * 100).toFixed(1) },
-                { name: 'Commercial', value: Math.round(gradeCommercial), pct: ((gradeCommercial / totalGrade) * 100).toFixed(1) },
-            ] : [
-                { name: 'Fine', value: 33, pct: '33.3' },
-                { name: 'Premium', value: 34, pct: '33.3' },
-                { name: 'Commercial', value: 33, pct: '33.3' },
-            ])
-
-            // Yield trend (from harvest records, grouped by season)
-            const seasonMap = {}
-            harvests?.forEach((h) => {
-                const season = h.season || 'Unknown'
-                if (!seasonMap[season]) seasonMap[season] = { predicted: 0, actual: 0 }
-                seasonMap[season].actual += parseFloat(h.yield_kg || 0)
-            })
-            const trendData = Object.entries(seasonMap).map(([season, vals]) => ({
-                season,
-                predicted: Math.round(vals.predicted),
-                actual: Math.round(vals.actual),
-            }))
-            setYieldTrend(trendData.length > 0 ? trendData : [
-                { season: '2024 Dry', predicted: 0, actual: 0 },
-                { season: '2024 Wet', predicted: 0, actual: 0 },
-                { season: '2025 Dry', predicted: 0, actual: 0 },
-            ])
-
-            // Critical farms: clusters with potential issues
-            const critical = clusters?.map((c) => {
-                const sd = c.cluster_stage_data
-                if (!sd) return null
-                const predicted = parseFloat(sd.predicted_yield || 0)
-                const actual = parseFloat(sd.current_yield || 0)
-                const prev = parseFloat(sd.previous_yield || 0)
-                const decline = prev > 0 ? (((prev - actual) / prev) * 100).toFixed(1) : 0
-                let risk = 'Low'
-                let priority = 1
-                if (decline > 50) { risk = 'Critical'; priority = 4 }
-                else if (decline > 30) { risk = 'High'; priority = 3 }
-                else if (decline > 15) { risk = 'Moderate'; priority = 2 }
-
-                return {
-                    id: c.id,
-                    farmName: c.farms?.farm_name || 'Unknown Farm',
-                    clusterName: c.cluster_name,
-                    riskLevel: risk,
-                    yieldDecline: parseFloat(decline),
-                    priorityScore: priority,
-                    soilPh: sd.soil_ph || 'N/A',
-                    moisture: sd.bean_moisture || 'N/A',
-                    predictedYield: predicted,
-                    actualYield: actual,
-                    previousYield: prev,
-                    plantStage: c.plant_stage,
-                    defectCount: sd.defect_count || 0,
-                }
-            }).filter(Boolean).filter(c => c.riskLevel !== 'Low') || []
-
-            setCriticalFarms(critical)
-
-            // Add initial audit log entries
-            setAuditLogs([
-                { time: new Date().toLocaleString(), action: 'Dashboard loaded', user: 'Sir Ernesto' },
-            ])
-        } catch (err) {
-            console.error('Error fetching dashboard data:', err)
-        }
-        setLoading(false)
-    }
-
+    // Audit log function
     const addAuditLog = (action) => {
         setAuditLogs((prev) => [
-            { time: new Date().toLocaleString(), action, user: 'Sir Ernesto' },
+            { time: new Date().toLocaleString(), action, user: 'Admin' },
             ...prev,
         ].slice(0, 50))
     }
+
+    useEffect(() => {
+        let isMounted = true
+        
+        const fetchData = async () => {
+            setLoading(true)
+            try {
+                const data = await fetchAdminAnalytics()
+                
+                if (!isMounted) return
+
+                setStats({
+                    totalFarmers: data.stats.totalFarmers,
+                    totalFarms: data.stats.totalFarms,
+                    totalClusters: data.stats.totalClusters,
+                    predictedYield: data.stats.predictedYield,
+                    actualYield: data.stats.actualYield,
+                    previousYield: data.stats.previousYield,
+                })
+
+                // Extract unique seasons
+                const uniqueSeasons = [...new Set(
+                    data.yieldTrends.map(t => t.season).filter(Boolean)
+                )].sort()
+                setSeasons(uniqueSeasons)
+
+                // Grade distribution for donut chart
+                const totalGrade = data.stats.gradeFine + data.stats.gradePremium + data.stats.gradeCommercial
+                setGradeDistribution(totalGrade > 0 ? [
+                    { name: 'Fine', value: Math.round((data.stats.gradeFine / totalGrade) * 100), kg: data.stats.gradeFine },
+                    { name: 'Premium', value: Math.round((data.stats.gradePremium / totalGrade) * 100), kg: data.stats.gradePremium },
+                    { name: 'Commercial', value: Math.round((data.stats.gradeCommercial / totalGrade) * 100), kg: data.stats.gradeCommercial },
+                ] : [
+                    { name: 'Fine', value: 33, kg: 0 },
+                    { name: 'Premium', value: 34, kg: 0 },
+                    { name: 'Commercial', value: 33, kg: 0 },
+                ])
+
+                // Yield trends
+                setYieldTrend(data.yieldTrends.length > 0 ? data.yieldTrends : [
+                    { season: 'No Data', predicted: 0, actual: 0 },
+                ])
+
+                // Critical farms: clusters with risk level not Low
+                const critical = (data.clusters || [])
+                    .filter(c => c.riskLevel !== 'Low')
+                    .map(c => ({
+                        id: c.id,
+                        farmId: c.farm?.id,
+                        farmName: c.farm?.farm_name || 'Unknown Farm',
+                        farmerName: c.farmer ? `${c.farmer.first_name} ${c.farmer.last_name}` : 'N/A',
+                        farmerId: c.farmer?.id,
+                        clusterName: c.cluster_name,
+                        riskLevel: c.riskLevel,
+                        yieldDecline: parseFloat(c.yieldDecline) || 0,
+                        priorityScore: c.priority,
+                        soilPh: c.stageData?.soil_ph || 'N/A',
+                        moisture: c.stageData?.bean_moisture || 'N/A',
+                        avgTemp: c.stageData?.avg_temp_c || 'N/A',
+                        avgRainfall: c.stageData?.avg_rainfall_mm || 'N/A',
+                        avgHumidity: c.stageData?.avg_humidity_pct || 'N/A',
+                        predictedYield: parseFloat(c.stageData?.predicted_yield) || 0,
+                        actualYield: parseFloat(c.latestHarvest?.yield_kg) || 0,
+                        previousYield: parseFloat(c.stageData?.pre_yield_kg) || 0,
+                        plantStage: c.plant_stage,
+                        plantCount: c.plant_count,
+                        defectCount: c.stageData?.defect_count || 0,
+                        season: c.stageData?.season || 'N/A',
+                        harvestRecords: c.allHarvests || [],
+                        stageData: c.stageData,
+                    }))
+
+                setCriticalFarms(critical)
+
+                // Add initial audit log
+                if (isMounted) addAuditLog('Dashboard loaded')
+            } catch (err) {
+                console.error('Error fetching dashboard data:', err)
+            }
+            if (isMounted) setLoading(false)
+        }
+        
+        fetchData()
+        
+        return () => { isMounted = false }
+    }, [refreshKey])
+
+    const handleRefresh = () => setRefreshKey(k => k + 1)
 
     const handleSort = (field) => {
         if (sortField === field) {
@@ -202,7 +166,12 @@ export default function AdminDashboard() {
         addAuditLog(`Sorted critical farms by ${field}`)
     }
 
-    const sortedCriticalFarms = [...criticalFarms].sort((a, b) => {
+    // Filter critical farms by season
+    const filteredCriticalFarms = seasonFilter === 'all'
+        ? criticalFarms
+        : criticalFarms.filter(f => f.season === seasonFilter)
+
+    const sortedCriticalFarms = [...filteredCriticalFarms].sort((a, b) => {
         const riskOrder = { Critical: 4, High: 3, Moderate: 2, Low: 1 }
         let aVal, bVal
         if (sortField === 'riskLevel') {
@@ -251,11 +220,40 @@ export default function AdminDashboard() {
         setNotifyDialog({ open: false, clusterName: '' })
     }
 
+    const handleViewCluster = (farm) => {
+        // Generate recommendations for this cluster
+        const recs = generateRecommendations({
+            id: farm.id,
+            cluster_name: farm.clusterName,
+            stageData: farm.stageData,
+        })
+        setClusterRecommendations(recs)
+        setSelectedCluster(farm)
+        addAuditLog(`Viewed cluster: ${farm.clusterName}`)
+    }
+
     const handleExportReport = () => {
         setExportDialog(true)
     }
 
     const doExport = () => {
+        // Export KPI data
+        const exportData = sortedCriticalFarms.map(f => ({
+            'Farm Name': f.farmName,
+            'Farmer': f.farmerName,
+            'Cluster': f.clusterName,
+            'Risk Level': f.riskLevel,
+            'Priority': f.priorityScore,
+            'Yield Decline (%)': f.yieldDecline,
+            'Predicted Yield (kg)': f.predictedYield,
+            'Actual Yield (kg)': f.actualYield,
+            'Previous Yield (kg)': f.previousYield,
+            'Soil pH': f.soilPh,
+            'Bean Moisture (%)': f.moisture,
+            'Defect Count': f.defectCount,
+            'Season': f.season,
+        }))
+        exportToCSV(exportData, `kpi_report_${new Date().toISOString().split('T')[0]}.csv`)
         addAuditLog('Exported KPI report')
         setExportDialog(false)
     }
@@ -265,6 +263,10 @@ export default function AdminDashboard() {
         ? ((yieldDiff / stats.predictedYield) * 100).toFixed(1)
         : 0
     const isOverProduction = yieldDiff >= 0
+
+    const yoyChange = stats.previousYield > 0
+        ? (((stats.actualYield - stats.previousYield) / stats.previousYield) * 100).toFixed(1)
+        : 0
 
     if (loading) {
         return (
@@ -280,11 +282,16 @@ export default function AdminDashboard() {
             <div className="admin-dash-header">
                 <div>
                     <h1>Dashboard</h1>
-                    <p>Welcome back, Sir Ernesto — Quality Control Manager</p>
+                    <p>Overview of all farms, clusters, and yield performance</p>
                 </div>
-                <button className="admin-export-btn" onClick={handleExportReport}>
-                    <Download size={16} /> Export Report
-                </button>
+                <div className="admin-header-actions">
+                    <button className="admin-refresh-btn" onClick={handleRefresh}>
+                        <RefreshCw size={16} /> Refresh
+                    </button>
+                    <button className="admin-export-btn" onClick={handleExportReport}>
+                        <Download size={16} /> Export Report
+                    </button>
+                </div>
             </div>
 
             {/* KPI Cards */}
@@ -332,6 +339,12 @@ export default function AdminDashboard() {
                     <div className="admin-kpi-data">
                         <span className="admin-kpi-value">{stats.actualYield.toLocaleString()} kg</span>
                         <span className="admin-kpi-label">Actual Yield (Season)</span>
+                        {stats.previousYield > 0 && (
+                            <span className={`admin-kpi-change ${parseFloat(yoyChange) >= 0 ? 'positive' : 'negative'}`}>
+                                {parseFloat(yoyChange) >= 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                                {yoyChange}% vs prev season
+                            </span>
+                        )}
                     </div>
                 </div>
                 <div className="admin-kpi-card">
@@ -360,9 +373,10 @@ export default function AdminDashboard() {
                         <LineChart data={yieldTrend}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                             <XAxis dataKey="season" fontSize={12} tick={{ fill: '#64748b' }} />
-                            <YAxis fontSize={12} tick={{ fill: '#64748b' }} />
+                            <YAxis fontSize={12} tick={{ fill: '#64748b' }} tickFormatter={(v) => `${v} kg`} />
                             <Tooltip
                                 contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
+                                formatter={(value) => [`${value.toLocaleString()} kg`]}
                             />
                             <Legend />
                             <Line type="monotone" dataKey="predicted" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} name="Predicted" />
@@ -382,20 +396,40 @@ export default function AdminDashboard() {
                                 data={gradeDistribution}
                                 cx="50%"
                                 cy="50%"
-                                innerRadius={70}
-                                outerRadius={100}
+                                innerRadius={60}
+                                outerRadius={90}
                                 dataKey="value"
                                 paddingAngle={4}
+                                label={({ name, value }) => `${name}: ${value}%`}
                             >
                                 {gradeDistribution.map((entry, index) => (
                                     <Cell key={entry.name} fill={GRADE_COLORS[index % GRADE_COLORS.length]} />
                                 ))}
                             </Pie>
-                            <Tooltip formatter={(v, name) => [`${v}%`, name]} />
+                            <Tooltip formatter={(v, name, entry) => [`${v}% (${entry.payload.kg} kg)`, name]} />
                             <Legend />
                         </PieChart>
                     </ResponsiveContainer>
                 </div>
+            </div>
+
+            {/* Grade Distribution Bar Chart */}
+            <div className="admin-chart-card admin-chart-full">
+                <div className="admin-chart-header">
+                    <h3>Grade Distribution by Season</h3>
+                </div>
+                <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={yieldTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="season" fontSize={12} tick={{ fill: '#64748b' }} />
+                        <YAxis fontSize={12} tick={{ fill: '#64748b' }} tickFormatter={(v) => `${v} kg`} />
+                        <Tooltip contentStyle={{ borderRadius: 8 }} formatter={(value) => [`${value.toLocaleString()} kg`]} />
+                        <Legend />
+                        <Bar dataKey="fine" stackId="a" fill={GRADE_COLORS[0]} name="Fine" />
+                        <Bar dataKey="premium" stackId="a" fill={GRADE_COLORS[1]} name="Premium" />
+                        <Bar dataKey="commercial" stackId="a" fill={GRADE_COLORS[2]} name="Commercial" />
+                    </BarChart>
+                </ResponsiveContainer>
             </div>
 
             {/* Critical Farms Table */}
@@ -405,20 +439,31 @@ export default function AdminDashboard() {
                         <h3><AlertTriangle size={18} /> Farms Requiring Immediate Attention</h3>
                         <p>{sortedCriticalFarms.length} cluster(s) flagged</p>
                     </div>
-                    {selectedRows.length > 0 && (
-                        <div className="admin-bulk-actions">
-                            <span>{selectedRows.length} selected</span>
-                            <button onClick={() => handleBulkAction('Approve Pest Control')}>
-                                <CheckSquare size={14} /> Approve Pest Control
-                            </button>
-                            <button onClick={() => handleBulkAction('Assign Task')}>
-                                <ClipboardList size={14} /> Assign Task
-                            </button>
-                            <button onClick={() => handleBulkAction('Notify Farmer')}>
-                                <Bell size={14} /> Notify Farmer
-                            </button>
+                    <div className="admin-critical-controls">
+                        <div className="admin-filter-select">
+                            <Filter size={14} />
+                            <select value={seasonFilter} onChange={(e) => setSeasonFilter(e.target.value)}>
+                                <option value="all">All Seasons</option>
+                                {seasons.map(s => (
+                                    <option key={s} value={s}>{s}</option>
+                                ))}
+                            </select>
                         </div>
-                    )}
+                        {selectedRows.length > 0 && (
+                            <div className="admin-bulk-actions">
+                                <span>{selectedRows.length} selected</span>
+                                <button onClick={() => handleBulkAction('Approve Pest Control')}>
+                                    <CheckSquare size={14} /> Approve Pest Control
+                                </button>
+                                <button onClick={() => handleBulkAction('Assign Task')}>
+                                    <ClipboardList size={14} /> Assign Task
+                                </button>
+                                <button onClick={() => handleBulkAction('Notify Farmer')}>
+                                    <Bell size={14} /> Notify Farmer
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {sortedCriticalFarms.length > 0 ? (
@@ -440,6 +485,7 @@ export default function AdminDashboard() {
                                         />
                                     </th>
                                     <th onClick={() => handleSort('farmName')} className="sortable">Farm Name</th>
+                                    <th onClick={() => handleSort('farmerName')} className="sortable">Farmer</th>
                                     <th onClick={() => handleSort('clusterName')} className="sortable">Cluster</th>
                                     <th onClick={() => handleSort('riskLevel')} className="sortable">Risk Level</th>
                                     <th onClick={() => handleSort('yieldDecline')} className="sortable">Yield Decline</th>
@@ -458,6 +504,7 @@ export default function AdminDashboard() {
                                             />
                                         </td>
                                         <td className="farm-name-cell">{farm.farmName}</td>
+                                        <td>{farm.farmerName}</td>
                                         <td>{farm.clusterName}</td>
                                         <td>
                                             <span className="risk-badge" style={{ background: RISK_COLORS[farm.riskLevel] + '20', color: RISK_COLORS[farm.riskLevel] }}>
@@ -473,7 +520,7 @@ export default function AdminDashboard() {
                                             </span>
                                         </td>
                                         <td className="action-cell">
-                                            <button className="admin-action-btn" onClick={() => { setSelectedCluster(farm); addAuditLog(`Viewed cluster: ${farm.clusterName}`) }}>
+                                            <button className="admin-action-btn" onClick={() => handleViewCluster(farm)}>
                                                 <Eye size={14} /> View
                                             </button>
                                             <button className="admin-action-btn admin-action-btn--warn" onClick={() => handleAssign(farm)}>
@@ -499,7 +546,7 @@ export default function AdminDashboard() {
             {/* Cluster Detail Modal */}
             {selectedCluster && (
                 <div className="admin-modal-overlay" onClick={() => setSelectedCluster(null)}>
-                    <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="admin-modal admin-modal--large" onClick={(e) => e.stopPropagation()}>
                         <div className="admin-modal-header">
                             <h2>Cluster Details: {selectedCluster.clusterName}</h2>
                             <button className="admin-modal-close" onClick={() => setSelectedCluster(null)}>
@@ -513,6 +560,10 @@ export default function AdminDashboard() {
                                     <span>{selectedCluster.farmName}</span>
                                 </div>
                                 <div className="admin-detail-item">
+                                    <label>Farmer</label>
+                                    <span>{selectedCluster.farmerName}</span>
+                                </div>
+                                <div className="admin-detail-item">
                                     <label>Risk Level</label>
                                     <span className="risk-badge" style={{ background: RISK_COLORS[selectedCluster.riskLevel] + '20', color: RISK_COLORS[selectedCluster.riskLevel] }}>
                                         {selectedCluster.riskLevel}
@@ -523,30 +574,36 @@ export default function AdminDashboard() {
                                     <span>{selectedCluster.plantStage}</span>
                                 </div>
                                 <div className="admin-detail-item">
+                                    <label>Plant Count</label>
+                                    <span>{selectedCluster.plantCount} trees</span>
+                                </div>
+                                <div className="admin-detail-item">
+                                    <label>Season</label>
+                                    <span>{selectedCluster.season}</span>
+                                </div>
+                            </div>
+
+                            <h3 className="admin-detail-section-title">Yield Performance</h3>
+                            <div className="admin-detail-grid">
+                                <div className="admin-detail-item">
                                     <label>Predicted Yield</label>
-                                    <span>{selectedCluster.predictedYield} kg</span>
+                                    <span>{selectedCluster.predictedYield.toLocaleString()} kg</span>
                                 </div>
                                 <div className="admin-detail-item">
                                     <label>Actual Yield</label>
-                                    <span>{selectedCluster.actualYield} kg</span>
+                                    <span>{selectedCluster.actualYield.toLocaleString()} kg</span>
                                 </div>
                                 <div className="admin-detail-item">
                                     <label>Previous Yield</label>
-                                    <span>{selectedCluster.previousYield} kg</span>
+                                    <span>{selectedCluster.previousYield.toLocaleString()} kg</span>
                                 </div>
                                 <div className="admin-detail-item">
                                     <label>Yield Decline</label>
                                     <span style={{ color: '#ef4444' }}>{selectedCluster.yieldDecline}%</span>
                                 </div>
-                                <div className="admin-detail-item">
-                                    <label>Priority Score</label>
-                                    <span className={`priority-badge priority-${selectedCluster.priorityScore}`}>
-                                        P{selectedCluster.priorityScore}
-                                    </span>
-                                </div>
                             </div>
 
-                            <h3 className="admin-detail-section-title">Soil & Health Indicators</h3>
+                            <h3 className="admin-detail-section-title">Soil & Environmental Indicators</h3>
                             <div className="admin-detail-grid">
                                 <div className="admin-detail-item">
                                     <label>Soil pH</label>
@@ -557,35 +614,83 @@ export default function AdminDashboard() {
                                     <span>{selectedCluster.moisture}%</span>
                                 </div>
                                 <div className="admin-detail-item">
+                                    <label>Avg Temperature</label>
+                                    <span>{selectedCluster.avgTemp}°C</span>
+                                </div>
+                                <div className="admin-detail-item">
+                                    <label>Avg Rainfall</label>
+                                    <span>{selectedCluster.avgRainfall} mm</span>
+                                </div>
+                                <div className="admin-detail-item">
+                                    <label>Avg Humidity</label>
+                                    <span>{selectedCluster.avgHumidity}%</span>
+                                </div>
+                                <div className="admin-detail-item">
                                     <label>Defect Count</label>
                                     <span>{selectedCluster.defectCount}</span>
                                 </div>
                             </div>
 
                             <h3 className="admin-detail-section-title">Recommended Interventions</h3>
-                            <ul className="admin-interventions">
-                                {selectedCluster.riskLevel === 'Critical' && (
-                                    <>
-                                        <li>🔴 Immediate soil analysis and pH correction</li>
-                                        <li>🔴 Urgent pest control inspection required</li>
-                                        <li>🔴 Fertilization schedule adjustment — increase NPK</li>
-                                    </>
-                                )}
-                                {selectedCluster.riskLevel === 'High' && (
-                                    <>
-                                        <li>🟠 Schedule pruning within 2 weeks</li>
-                                        <li>🟠 Apply organic pesticide treatment</li>
-                                        <li>🟠 Monitor shade tree density</li>
-                                    </>
-                                )}
-                                {selectedCluster.riskLevel === 'Moderate' && (
-                                    <>
-                                        <li>🟡 Follow regular fertilization schedule</li>
-                                        <li>🟡 Check irrigation levels</li>
-                                        <li>🟡 Monitor for early pest signs</li>
-                                    </>
-                                )}
-                            </ul>
+                            {clusterRecommendations.length > 0 ? (
+                                <ul className="admin-interventions">
+                                    {clusterRecommendations.map((rec, idx) => (
+                                        <li key={idx} className={`intervention-${rec.priority.toLowerCase()}`}>
+                                            <span className="intervention-priority">
+                                                {rec.priority === 'High' ? '🔴' : rec.priority === 'Medium' ? '🟠' : '🟢'}
+                                            </span>
+                                            <div>
+                                                <strong>{rec.factor}</strong>
+                                                <p>{rec.recommendation}</p>
+                                                <small>Ideal: {rec.ideal}</small>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <ul className="admin-interventions">
+                                    {selectedCluster.riskLevel === 'Critical' && (
+                                        <>
+                                            <li>🔴 Immediate soil analysis and pH correction</li>
+                                            <li>🔴 Urgent pest control inspection required</li>
+                                            <li>🔴 Fertilization schedule adjustment — increase NPK</li>
+                                        </>
+                                    )}
+                                    {selectedCluster.riskLevel === 'High' && (
+                                        <>
+                                            <li>🟠 Schedule pruning within 2 weeks</li>
+                                            <li>🟠 Apply organic pesticide treatment</li>
+                                            <li>🟠 Monitor shade tree density</li>
+                                        </>
+                                    )}
+                                    {selectedCluster.riskLevel === 'Moderate' && (
+                                        <>
+                                            <li>🟡 Follow regular fertilization schedule</li>
+                                            <li>🟡 Check irrigation levels</li>
+                                            <li>🟡 Monitor for early pest signs</li>
+                                        </>
+                                    )}
+                                </ul>
+                            )}
+
+                            {/* Harvest History Chart */}
+                            {selectedCluster.harvestRecords && selectedCluster.harvestRecords.length > 0 && (
+                                <>
+                                    <h3 className="admin-detail-section-title">Historical Yield Performance</h3>
+                                    <ResponsiveContainer width="100%" height={200}>
+                                        <BarChart data={selectedCluster.harvestRecords.map(h => ({
+                                            season: h.season,
+                                            yield: parseFloat(h.yield_kg) || 0,
+                                        }))}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="season" fontSize={11} />
+                                            <YAxis fontSize={11} tickFormatter={(v) => `${v} kg`} />
+                                            <Tooltip formatter={(v) => [`${v} kg`, 'Yield']} />
+                                            <Bar dataKey="yield" fill="#4A7C59" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -605,7 +710,7 @@ export default function AdminDashboard() {
                 </div>
             </div>
 
-            {/* Bulk Action Confirmation Dialog */}
+            {/* Dialogs */}
             <ConfirmDialog
                 isOpen={bulkActionDialog.open}
                 onClose={() => setBulkActionDialog({ open: false, action: '', count: 0 })}
@@ -617,7 +722,6 @@ export default function AdminDashboard() {
                 variant="warning"
             />
 
-            {/* Assign Task Confirmation Dialog */}
             <ConfirmDialog
                 isOpen={assignDialog.open}
                 onClose={() => setAssignDialog({ open: false, clusterName: '' })}
@@ -629,7 +733,6 @@ export default function AdminDashboard() {
                 variant="success"
             />
 
-            {/* Notify Farmer Confirmation Dialog */}
             <ConfirmDialog
                 isOpen={notifyDialog.open}
                 onClose={() => setNotifyDialog({ open: false, clusterName: '' })}
@@ -641,7 +744,6 @@ export default function AdminDashboard() {
                 variant="success"
             />
 
-            {/* Export Report Confirmation Dialog */}
             <ConfirmDialog
                 isOpen={exportDialog}
                 onClose={() => setExportDialog(false)}

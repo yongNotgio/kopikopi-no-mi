@@ -1,0 +1,93 @@
+ERD SCHEMA:
+Entity: users
+  - id uuid PRIMARY KEY DEFAULT uuid_generate_v4()
+  - username varchar(255) UNIQUE NOT NULL
+  - email varchar(255) UNIQUE NOT NULL
+  - password_hash varchar(255) NOT NULL
+  - first_name varchar(255) NOT NULL
+  - last_name varchar(255) NOT NULL
+  - middle_initial varchar(10)
+  - contact_number varchar(255) NOT NULL
+  - age integer NOT NULL CHECK (age >= 18 AND age <= 120)
+  - municipality varchar(255) NOT NULL
+  - province varchar(255) NOT NULL
+  - role varchar(255)
+  - created_at timestamptz NOT NULL DEFAULT now()
+  - updated_at timestamptz NOT NULL DEFAULT now()
+
+Entity: farms
+  - id uuid PRIMARY KEY DEFAULT uuid_generate_v4()
+  - user_id uuid UNIQUE NOT NULL REFERENCES users(id)
+  - farm_name varchar(255)
+  - farm_area numeric
+  - elevation_m numeric
+  - overall_tree_count integer
+  - created_at timestamptz NOT NULL DEFAULT now()
+  - updated_at timestamptz NOT NULL DEFAULT now()
+
+Entity: clusters
+  - id uuid PRIMARY KEY DEFAULT uuid_generate_v4()
+  - farm_id uuid NOT NULL REFERENCES farms(id)
+  - cluster_name varchar(255) NOT NULL
+  - area_size_sqm numeric NOT NULL
+  - plant_count integer NOT NULL
+  - variety varchar(255)
+  - plant_stage plant_stage NOT NULL DEFAULT 'seed-sapling'
+  - created_at timestamptz NOT NULL DEFAULT now()
+  - updated_at timestamptz NOT NULL DEFAULT now()
+
+Entity: cluster_stage_data
+  - id uuid PRIMARY KEY DEFAULT uuid_generate_v4()
+  - cluster_id uuid NOT NULL REFERENCES clusters(id)
+  - season varchar(50) NOT NULL
+  - date_planted date
+  - plant_age_months integer
+  - number_of_plants integer
+  - fertilizer_type fertilizer_kind
+  - fertilizer_frequency fertilizer_freq
+  - pesticide_type pesticide_kind
+  - pesticide_frequency pesticide_freq
+  - last_pruned_date date
+  - previous_pruned_date date
+  - pruning_interval_months integer
+  - shade_tree_present boolean
+  - shade_tree_species varchar(255)
+  - soil_ph numeric
+  - avg_temp_c numeric
+  - avg_rainfall_mm numeric
+  - avg_humidity_pct numeric
+  - actual_flowering_date date
+  - estimated_flowering_date date
+  - estimated_harvest_date date
+  - actual_harvest_date date
+  - pre_last_harvest_date date
+  - pre_total_trees integer
+  - pre_yield_kg numeric
+  - pre_grade_fine numeric
+  - pre_grade_premium numeric
+  - pre_grade_commercial numeric
+  - previous_fine_pct numeric
+  - previous_premium_pct numeric
+  - previous_commercial_pct numeric
+  - defect_count integer
+  - bean_moisture numeric
+  - bean_screen_size varchar(255)
+  - predicted_yield numeric
+  - created_at timestamptz NOT NULL DEFAULT now()
+  - updated_at timestamptz NOT NULL DEFAULT now()
+  - CONSTRAINT uq_cluster_season UNIQUE (cluster_id, season)
+
+Entity: harvest_records
+  - id uuid PRIMARY KEY DEFAULT uuid_generate_v4()
+  - cluster_id uuid NOT NULL REFERENCES clusters(id)
+  - season varchar(255)
+  - actual_harvest_date date
+  - yield_kg numeric
+  - grade_fine numeric
+  - grade_premium numeric
+  - grade_commercial numeric
+  - fine_pct numeric GENERATED ALWAYS AS (grade_fine / NULLIF(yield_kg, 0) * 100) STORED
+  - premium_pct numeric GENERATED ALWAYS AS (grade_premium / NULLIF(yield_kg, 0) * 100) STORED
+  - commercial_pct numeric GENERATED ALWAYS AS (grade_commercial / NULLIF(yield_kg, 0) * 100) STORED
+  - notes text
+  - recorded_at timestamptz NOT NULL DEFAULT now()

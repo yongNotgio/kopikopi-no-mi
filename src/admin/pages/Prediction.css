@@ -328,3 +328,64 @@
         grid-template-columns: 1fr 1fr;
     }
 }
+
+/* ===== ADDITIONAL PREDICTION STYLES ===== */
+.prediction-refresh-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    background: #ffffff;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.prediction-refresh-btn:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+.prediction-farm-mini-chart {
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    border: 1px solid #e2e8f0;
+}
+
+.prediction-farm-mini-chart h5 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stage-tag.stage-seedling,
+.stage-tag.stage-seed-sapling {
+    background: #ecfdf5;
+    color: #059669;
+}
+
+.stage-tag.stage-vegetative,
+.stage-tag.stage-tree {
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+.stage-tag.stage-flowering {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.stage-tag.stage-mature,
+.stage-tag.stage-ready-to-harvest {
+    background: #fef2f2;
+    color: #dc2626;
+}

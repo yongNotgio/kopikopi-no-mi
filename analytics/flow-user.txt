@@ -1,0 +1,231 @@
+START
+
+PAGE: LOG-IN & REGISTRATION
+LOGIN: When users arrive at the system, they are first directed to the Login Page, which serves as a landing page of the platform. The page contains the following fields:
+Username or Email
+Password
+Sign In button
+Below the Sign In button, there is a prompt that says: “Don’t have an account? Sign Up”, which redirects the user to the Registration Page.
+
+REGISTRATION: 
+On the Registration Page, new farmers can create an account by providing their required details such as:
+Name (LastName, First Name, Middle Initial)
+Username or Email
+Password
+Contact Number
+Age 	
+Municipality/City
+Province
+Once registration is completed successfully, the user can return to the Login Page to sign in. 
+
+When the farmer clicks the Sign In button, the system performs authentication by:
+Checking if the user is registered in the database
+Verifying the username/email and password
+~ If the credentials are correct, the farmer is granted access and redirected to the Dashboard, where they can manage their farm-related activities.
+~ If the credentials are incorrect, an error message is displayed informing the user that the login details are invalid.
+
+PAGE: DASHBOARD
+After successful login, the user is redirected to the Dashboard, where a main button is provided to input and manage farm details.
+Farm Details Registration
+Upon clicking the button, the farmer is prompted to register basic farm information including:
+Farm Name
+Farm area
+Elevation
+Plant variety
+Overall tree count
+
+Once a farm already exists in the system, an additional button appears allowing the user to add clusters or groupings of coffee plants within the farm.
+
+Cluster Registration
+Each cluster represents a specific area of the farm and contains the following details:
+Cluster name
+Area size
+Plant count
+Plant stages, which can be:
+Seed/Sapling
+Tree
+Flowering/Fruit-bearing
+Ready to Harvest
+
+Clicking on a cluster name opens a pop-up or form box where the user is prompted to input the specific data required for that cluster type.
+
+SUB-PAGE
+The farm layout is visually represented as a square or rectangular figure, with each cluster shown as a selectable section.
+Seed/Sapling
+Each seed or sapling cluster records:
+Date planted
+Number of plants
+Variety
+Fertilizer application frequency
+Fertilizer type
+Pesticide type 
+Pesticide application frequency
+Agro-climatic [monhtly taemperature, rainfall, humidity] 
+Soil pH
+Tree 
+These stages include:
+Date planted
+Number of plants
+Variety
+Fertilizer application frequency
+Fertilizer type
+Pesticide and application frequency
+Last harvested date
+Previous coffee yield (kg)
+Last pruned date
+Presence of shade trees
+Agro-climatic [monhtly temperature, rainfall, humidity] 
+Soil pH
+Flowering/FruitBearing
+These stages include:
+Date planted
+Number of plants
+Variety
+Fertilizer application frequency
+Fertilizer type
+Pesticide and application frequency
+Last harvested date
+Previous coffee yield (kg)
+Last pruned date
+Presence of shade trees
+Agro-climatic [monthly temperature, rainfall, humidity] 
+Soil pH
+Estimated flowering date (?)
+Ready to Harvest
+This stage contains more advanced production data:
+Date planted
+Number of plants
+Variety
+Fertilizer application frequency
+Fertilizer type
+Pesticide type
+Pesticide application frequency
+Harvest date
+Previous yield
+Predicted yield
+Date & Season of Harvest
+Current/Actual yield
+Proportion of each coffee grade
+Last pruned date
+Agro-climatic [monthly temperature, rainfall, humidity] 
+Soil pH
+Shade trees
+Estimated harvest date
+	
+	For Harvest Monitoring: 
+	    For Pre-Harvest, the system records:
+Last harvest date
+Total number of trees
+Yielded coffee in kilograms
+Quantity per grade:
+Highest Grade – Fine
+Middle – Premium
+Lowest Grade – Commercial
+
+For Post-Harvest, it captures:
+Current harvest yield
+Proportions of each grade
+Defect count
+Bean moisture content
+Bean screen size
+
+Kulang pa reports -  
+option to generate reports per cluster/farm
+
+PAGE: HARVEST RECORDS & FORECAST
+Next to the Dashboard is the Harvest Records & Forecast Page, which serves as the centralized area for monitoring historical performance and future yield predictions.
+
+When the page loads, it initially displays a list of all clusters that are:
+Ready to harvest
+Currently flowering or
+Already fruit-bearing
+Each cluster in the list shows a quick summary including:
+Cluster ID  
+Cluster Name
+Plant variety
+Tree count
+Latest harvest season
+Latest predicted yield
+This allows farmers to quickly identify active production areas.
+
+~ Cluster Detail Overlay / Expanded View
+Upon clicking a cluster, a detailed panel or overlay appears displaying complete cluster information.
+Cluster Information
+This includes
+Cluster ID
+Plant ID
+Tree Count
+Plant Age
+Variety
+Elevation
+Planting Date
+Flowering/Fruitbearing Date
+Expected Harvest Date
+Plant Management Status [
+Fertilizer Type
+Fertilizer application frequency 
+Pesticide Type
+Pesticide Application Frequency
+Date last pruned
+Presence of shade trees
+Soil pH (???)
+Yield & Forecast Data
+The system then presents 
+Previous coffee yield per harvest season
+Current season predicted yield
+Actual harvested yield 
+Proportion of yield by grade:
+Fine
+Premium
+Commercial
+Analytics/Forecast Section
+Within the same overlay, charts are displayed for easier interpretation:
+Line charts showing yield trends across harvest seasons
+Bar charts showing grade distribution per season
+Comparison charts for:
+Predicted vs actual yield
+Previous vs current season yield
+	
+This page has filters option. It can filter data by:
+Harvest Season (Example Harvest Season 2022-2023)
+	
+
+PAGE: Decision Support/Recommendations Page?
+The Decision Support & Recommendation Page provides farmers with actionable insights and best practices based on the performance and condition of their clusters.
+This page analyzes production data, crop status, and environmental factors to help improve yield and farm management.
+
+Upon landing on the page, the system displays a list of clusters with performance indicators such as:
+High yield
+Moderate yield
+Poor or declining yield
+Each cluster is visually tagged (example: warning icons or color levels) to quickly highlight areas needing attention.
+
+Problem Identification:
+For clusters with poor or declining yield, the system automatically identifies possible contributing factors, including:
+Insufficient fertilizer application
+Incorrect fertilizer type
+Lack of pesticide use or pest infestation
+Delayed or missed pruning
+Extreme or imbalanced soil pH
+Presence of diseases or pests
+Weather or climate stress (excess rain, drought, temperature extremes)
+Poor shade tree management
+Each factor is displayed with short explanations based on the cluster’s recorded data.
+
+Subpage/Overlay:
+Recommendation & Best Practices
+For every identified issue, the system generates targeted recommendations. These recommendations are derived from coffee farming handbooks, guidebooks, and agricultural best practices (ATI, ONS, CQI) 
+
+The page also ranks clusters based on urgency of intervention, showing:
+Clusters with critical yield drop
+Clusters with moderate issues
+Clusters performing well
+
+This allows farmers to:
+Focus on high-priority problem areas first
+Allocate resources efficiently
+Plan farm activities strategically
+
+For filters, farmers can filter clusters by:
+Yield performance (low, medium, high)
+Harvest Season

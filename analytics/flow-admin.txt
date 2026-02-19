@@ -1,0 +1,54 @@
+START     
+
+PAGE: LOG-IN 
+LOGIN: When users arrive at the system, they are first directed to the Login Page, which serves as a landing page of the platform. The page contains the following fields:
+Username [USE SECURE AND FIXED USERNAME]
+Password [USE SECURE AND FIXED PASSWORD]
+LOG IN BUTTON
+PAGE: DASHBOARD 
+Total Registered Farmers
+Total Active Farms
+Total Active Clusters
+If active farms exist, their corresponding active clusters will appear.
+Total Predicted YIeld (Current Season)
+Total Actual Yield (Current Season)
+Note: Previous Yield should be present.
+Farms Requiring Immediate Attention (Cluster-Level Risk Identification)
+The user will click “view critical farms” then select farm and then “view cluster” then it will provide some details about a certain cluster’s detailed information:
+Risk Level Classification (Low, Moderate, High, Critical)
+Predicted Yield Decline (%)
+Historical Yield Performance
+Soil Health Indicators (pH level, moisture, nutrient status)
+Pest and Disease Risk Probability
+Environmental Stress Factors (rainfall deviation, temperature anomalies)
+Tree Health Status & Defect Rate
+Recommended Intervention Actions (fertilization adjustment, pruning schedule, pest control measures)
+Priority Score for Immediate Action
+Yield Prediction  vs Actual Yield (Performance, Over Production/Under Production) 
+Coffee Grade Distribution visualize using donut chart
+
+Action: use line chart for comparison, display admin only KPIs with year over year trends and export buttons for reports, optimize and streamline critical farms view into a single sortable table with admin tools like "Assign Task" or "Notify Farmer" buttons, Enable bulk interventions (e.g., approve pest control for multiple clusters) and admin audit logs for all views.
+
+PAGE: REGISTERED FARMERS
+List of Farmers and their profile 
+Farmer Name
+Age
+Municipality/City
+Province
+Farm Name
+Total Farm Area
+Number of Clusters
+Farm Status (Healthy/Moderate/Risk/High Risk)
+Action: add CRUD function, add registration date and last updated by 
+
+PAGE: PREDICTION 
+	Overall or per farm? Expected harvest yield, [analytics page ni user] pero 
+OVERALL SINCE THIS IS ADMIN SIDE[ OVERALL YIELD WITH COMPARISON TO LAST YEARS]
+
+Action: bar charts comparing multi-year overall yields with per-farm expanders. DI PA NI SURE
+
+
+STORY FLOW:
+
+Admin goes to the landing page and will be faced with a log form containing log in form in which he will log in with his admin credentials. Upon successful authentication the admin will be directed to the dashboard but if the credentials are wrong he will be redirected to the log in page with an error message. Then on the dashboard page the admin will see KPIs in responsive cards showing total registered farmers, total active farms, total active clusters that expands if farm exist, total predicted yield and total actual yield which are from current season, previous yield comparison using line chart with year over year trends, an export button for all KPI reports, and a critical farm section that shows a single sortable table for farms requiring immediate attention with columns for Farm Name, Cluster, Risk Level, Yield Decline, Priority Score, and admin action buttons like "Assign Task" or "Notify Farmer" plus bulk intervention options like "Approve Pest Control" for multiple selections and admin audit logs tracking all views and changes. On Registered Farmers page admin may click the page and see the paginated table listing all attributes including Farmer Name, Age, Municipality/City, Province, Farm Name, Total Farm Area, Number of Clusters, Farm Status, Registration Date, Last Updated By, and CRUD action buttons for add/edit/delete with search filters and validation. On the Prediction page admin navigates to the prediction page containing the overall admin view with a bar chart comparing multi-year yields with per-farm expanders, admin controls like "Export CSV", and toggle between overall vs per-farm views. From any page admin can access the navigation menu to switch between Dashboard, Registered Farmers, and Prediction pages, view profile for logout option with session timeout after 30 minutes inactivity, and all pages include responsive design for mobile admin use and admin-only privilege enforcement.
+

@@ -7,6 +7,7 @@ import DashboardLayout from './layouts/DashboardLayout'
 import Dashboard from './pages/Dashboard/Dashboard'
 import HarvestRecords from './pages/HarvestRecords/HarvestRecords'
 import Recommendations from './pages/Recommendations/Recommendations'
+import Analytics from './pages/Analytics/Analytics'
 import Settings from './pages/Settings/Settings'
 import ClusterDetail from './pages/ClusterDetail/ClusterDetail'
 import LoadingScreen from './components/LoadingScreen'
@@ -73,6 +74,7 @@ function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="clusters/:clusterId/:section?" element={<ClusterDetail />} />
             <Route path="harvest" element={<HarvestRecords />} />
+            <Route path="analytics" element={<Analytics />} />
             <Route path="recommendations" element={<Recommendations />} />
             <Route path="settings" element={<Settings />} />
           </Route>

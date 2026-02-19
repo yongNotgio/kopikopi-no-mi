@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabase'
 import {
     Download,
     ToggleLeft,
@@ -7,11 +6,13 @@ import {
     TrendingUp,
     ChevronDown,
     ChevronRight,
+    RefreshCw,
 } from 'lucide-react'
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
     ResponsiveContainer, LineChart, Line,
 } from 'recharts'
+import { fetchAdminAnalytics, exportToCSV, GRADE_COLORS } from '../../lib/analyticsService'
 import './Prediction.css'
 
 export default function Prediction() {
@@ -28,87 +29,61 @@ export default function Prediction() {
     const fetchPredictionData = async () => {
         setLoading(true)
         try {
-            // Fetch all clusters with stage data & farm info
-            const { data: clusters, error } = await supabase
-                .from('clusters')
-                .select('*, cluster_stage_data(*), farms!inner(id, farm_name, user_id, users!inner(first_name, last_name))')
+            const data = await fetchAdminAnalytics()
 
-            if (error) throw error
-
-            // Fetch harvest records for historical data
-            const { data: harvests } = await supabase
-                .from('harvest_records')
-                .select('*, clusters!inner(farm_id, farms!inner(farm_name))')
-
-            // --- Overall aggregated data ---
-            // Group yields by season from harvest_records
-            const seasonMap = {}
-            harvests?.forEach((h) => {
-                const season = h.season || 'Unknown'
-                if (!seasonMap[season]) seasonMap[season] = { season, actual: 0, predicted: 0 }
-                seasonMap[season].actual += parseFloat(h.yield_kg || 0)
-            })
-
-            // Add predicted yields from cluster_stage_data
-            clusters?.forEach((c) => {
-                const sd = c.cluster_stage_data
-                if (sd?.harvest_season) {
-                    if (!seasonMap[sd.harvest_season]) {
-                        seasonMap[sd.harvest_season] = { season: sd.harvest_season, actual: 0, predicted: 0 }
-                    }
-                    seasonMap[sd.harvest_season].predicted += parseFloat(sd.predicted_yield || 0)
-                }
-            })
-
-            const overall = Object.values(seasonMap).map((s) => ({
-                ...s,
-                actual: Math.round(s.actual),
-                predicted: Math.round(s.predicted),
-            }))
-
-            // If no data, show placeholder
-            setOverallData(overall.length > 0 ? overall : [
-                { season: '2023 Dry', actual: 0, predicted: 0 },
-                { season: '2023 Wet', actual: 0, predicted: 0 },
-                { season: '2024 Dry', actual: 0, predicted: 0 },
-                { season: '2024 Wet', actual: 0, predicted: 0 },
-                { season: '2025 Dry', actual: 0, predicted: 0 },
+            // --- Overall aggregated data from yield trends ---
+            setOverallData(data.yieldTrends.length > 0 ? data.yieldTrends : [
+                { season: 'No Data', actual: 0, predicted: 0 },
             ])
 
             // --- Per-farm data ---
             const farmMap = {}
-            clusters?.forEach((c) => {
-                const farm = c.farms
+            data.clusters?.forEach((c) => {
+                const farm = c.farm
                 const farmId = farm?.id
                 if (!farmId) return
 
                 if (!farmMap[farmId]) {
                     farmMap[farmId] = {
                         id: farmId,
-                        farmName: farm.farm_name,
-                        farmerName: `${farm.users?.first_name || ''} ${farm.users?.last_name || ''}`.trim(),
+                        farmName: farm.farm_name || 'Unknown Farm',
+                        farmerName: c.farmer ? `${c.farmer.first_name || ''} ${c.farmer.last_name || ''}`.trim() : 'N/A',
                         clusters: [],
                         totalPredicted: 0,
                         totalActual: 0,
                         totalPrevious: 0,
+                        seasonData: {},
                     }
                 }
 
-                const sd = c.cluster_stage_data
-                const predicted = parseFloat(sd?.predicted_yield || 0)
-                const actual = parseFloat(sd?.current_yield || 0)
-                const previous = parseFloat(sd?.previous_yield || 0)
+                // Get data from latest stage data
+                const sd = c.stageData || {}
+                const predicted = parseFloat(sd.predicted_yield || 0)
+                const previous = parseFloat(sd.pre_yield_kg || 0)
+                
+                // Get actual from latest harvest
+                const actual = c.latestHarvest ? parseFloat(c.latestHarvest.yield_kg || 0) : 0
 
                 farmMap[farmId].clusters.push({
+                    id: c.id,
                     name: c.cluster_name,
                     predicted: Math.round(predicted),
                     actual: Math.round(actual),
                     previous: Math.round(previous),
                     stage: c.plant_stage,
+                    season: sd.season || 'N/A',
                 })
                 farmMap[farmId].totalPredicted += predicted
                 farmMap[farmId].totalActual += actual
                 farmMap[farmId].totalPrevious += previous
+
+                // Build per-season data for the farm
+                const season = sd.season || 'Unknown'
+                if (!farmMap[farmId].seasonData[season]) {
+                    farmMap[farmId].seasonData[season] = { season, predicted: 0, actual: 0 }
+                }
+                farmMap[farmId].seasonData[season].predicted += predicted
+                farmMap[farmId].seasonData[season].actual += actual
             })
 
             setFarmData(Object.values(farmMap).map((f) => ({
@@ -116,6 +91,11 @@ export default function Prediction() {
                 totalPredicted: Math.round(f.totalPredicted),
                 totalActual: Math.round(f.totalActual),
                 totalPrevious: Math.round(f.totalPrevious),
+                seasonTrends: Object.values(f.seasonData).map(s => ({
+                    ...s,
+                    predicted: Math.round(s.predicted),
+                    actual: Math.round(s.actual),
+                })),
             })))
         } catch (err) {
             console.error('Error fetching prediction data:', err)
@@ -124,25 +104,31 @@ export default function Prediction() {
     }
 
     const handleExportCSV = () => {
-        let csv = ''
         if (viewMode === 'overall') {
-            csv = 'Season,Predicted Yield (kg),Actual Yield (kg)\n'
-            overallData.forEach((row) => {
-                csv += `${row.season},${row.predicted},${row.actual}\n`
-            })
+            exportToCSV(
+                overallData.map(row => ({
+                    'Season': row.season,
+                    'Predicted Yield (kg)': row.predicted,
+                    'Actual Yield (kg)': row.actual,
+                    'Fine (kg)': row.fine || 0,
+                    'Premium (kg)': row.premium || 0,
+                    'Commercial (kg)': row.commercial || 0,
+                })),
+                `prediction_overall_${new Date().toISOString().split('T')[0]}.csv`
+            )
         } else {
-            csv = 'Farm,Farmer,Predicted (kg),Actual (kg),Previous (kg)\n'
-            farmData.forEach((farm) => {
-                csv += `${farm.farmName},${farm.farmerName},${farm.totalPredicted},${farm.totalActual},${farm.totalPrevious}\n`
-            })
+            exportToCSV(
+                farmData.map(farm => ({
+                    'Farm': farm.farmName,
+                    'Farmer': farm.farmerName,
+                    'Predicted (kg)': farm.totalPredicted,
+                    'Actual (kg)': farm.totalActual,
+                    'Previous (kg)': farm.totalPrevious,
+                    'Clusters': farm.clusters.length,
+                })),
+                `prediction_farms_${new Date().toISOString().split('T')[0]}.csv`
+            )
         }
-        const blob = new Blob([csv], { type: 'text/csv' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `prediction_${viewMode}_${new Date().toISOString().split('T')[0]}.csv`
-        a.click()
-        URL.revokeObjectURL(url)
     }
 
     if (loading) {
@@ -162,6 +148,9 @@ export default function Prediction() {
                     <p>Overall yield analysis and per-farm comparison</p>
                 </div>
                 <div className="prediction-controls">
+                    <button className="prediction-refresh-btn" onClick={fetchPredictionData}>
+                        <RefreshCw size={16} /> Refresh
+                    </button>
                     <button
                         className={`prediction-toggle ${viewMode === 'overall' ? 'active' : ''}`}
                         onClick={() => setViewMode(viewMode === 'overall' ? 'farm' : 'overall')}
@@ -185,7 +174,7 @@ export default function Prediction() {
                             <BarChart data={overallData} barGap={8}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                                 <XAxis dataKey="season" fontSize={12} tick={{ fill: '#64748b' }} />
-                                <YAxis fontSize={12} tick={{ fill: '#64748b' }} unit=" kg" />
+                                <YAxis fontSize={12} tick={{ fill: '#64748b' }} tickFormatter={(v) => `${v} kg`} />
                                 <Tooltip
                                     contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
                                     formatter={(val) => [`${val.toLocaleString()} kg`]}
@@ -193,6 +182,27 @@ export default function Prediction() {
                                 <Legend />
                                 <Bar dataKey="predicted" fill="#f59e0b" name="Predicted Yield" radius={[6, 6, 0, 0]} />
                                 <Bar dataKey="actual" fill="#3b82f6" name="Actual Yield" radius={[6, 6, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+
+                    {/* Grade Distribution by Season */}
+                    <div className="prediction-chart-card">
+                        <h3>Grade Distribution by Season</h3>
+                        <p>Fine, Premium, and Commercial grade yields</p>
+                        <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={overallData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                <XAxis dataKey="season" fontSize={12} tick={{ fill: '#64748b' }} />
+                                <YAxis fontSize={12} tick={{ fill: '#64748b' }} tickFormatter={(v) => `${v} kg`} />
+                                <Tooltip
+                                    contentStyle={{ borderRadius: 8 }}
+                                    formatter={(val) => [`${val.toLocaleString()} kg`]}
+                                />
+                                <Legend />
+                                <Bar dataKey="fine" stackId="a" fill={GRADE_COLORS[0]} name="Fine" />
+                                <Bar dataKey="premium" stackId="a" fill={GRADE_COLORS[1]} name="Premium" />
+                                <Bar dataKey="commercial" stackId="a" fill={GRADE_COLORS[2]} name="Commercial" />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -250,16 +260,38 @@ export default function Prediction() {
                                         <span>Previous</span>
                                         <strong>{farm.totalPrevious.toLocaleString()} kg</strong>
                                     </div>
+                                    <div className="prediction-stat">
+                                        <span>Clusters</span>
+                                        <strong>{farm.clusters.length}</strong>
+                                    </div>
                                 </div>
                             </div>
 
                             {expandedFarm === farm.id && (
                                 <div className="prediction-farm-expanded">
+                                    {/* Mini chart for farm season trends */}
+                                    {farm.seasonTrends?.length > 0 && (
+                                        <div className="prediction-farm-mini-chart">
+                                            <h5>Season Trends</h5>
+                                            <ResponsiveContainer width="100%" height={150}>
+                                                <LineChart data={farm.seasonTrends}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                                    <XAxis dataKey="season" fontSize={10} />
+                                                    <YAxis fontSize={10} tickFormatter={(v) => `${v}`} />
+                                                    <Tooltip formatter={(val) => [`${val.toLocaleString()} kg`]} />
+                                                    <Line type="monotone" dataKey="predicted" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name="Predicted" />
+                                                    <Line type="monotone" dataKey="actual" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} name="Actual" />
+                                                </LineChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    )}
+                                    
                                     <table className="prediction-cluster-table">
                                         <thead>
                                             <tr>
                                                 <th>Cluster</th>
                                                 <th>Stage</th>
+                                                <th>Season</th>
                                                 <th>Predicted (kg)</th>
                                                 <th>Actual (kg)</th>
                                                 <th>Previous (kg)</th>
@@ -267,14 +299,15 @@ export default function Prediction() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {farm.clusters.map((cluster, i) => {
+                                            {farm.clusters.map((cluster) => {
                                                 const diff = cluster.actual - cluster.predicted
                                                 return (
-                                                    <tr key={i}>
+                                                    <tr key={cluster.id}>
                                                         <td className="cluster-name-bold">{cluster.name}</td>
                                                         <td>
-                                                            <span className={`stage-tag stage-${cluster.stage}`}>{cluster.stage}</span>
+                                                            <span className={`stage-tag stage-${cluster.stage?.toLowerCase()}`}>{cluster.stage || 'N/A'}</span>
                                                         </td>
+                                                        <td>{cluster.season}</td>
                                                         <td>{cluster.predicted.toLocaleString()}</td>
                                                         <td>{cluster.actual.toLocaleString()}</td>
                                                         <td>{cluster.previous.toLocaleString()}</td>

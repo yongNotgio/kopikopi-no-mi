@@ -15,6 +15,7 @@ import {
   Scissors,
   FlaskConical,
   ShieldAlert,
+  TrendingUp,
 } from 'lucide-react'
 import ConfirmDialog from '../components/ConfirmDialog/ConfirmDialog'
 import './DashboardLayout.css'
@@ -35,6 +36,7 @@ export default function DashboardLayout() {
   const appNavItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/harvest', icon: BarChart3, label: 'Harvest Records' },
+    { path: '/analytics', icon: TrendingUp, label: 'Analytics' },
     { path: '/recommendations', icon: Lightbulb, label: 'Recommendations' },
     { path: '/settings', icon: Settings, label: 'Settings' },
   ]

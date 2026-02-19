@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useAuth } from '../../context/AuthContext'
 import { useFarm } from '../../context/FarmContext'
 import {
   BarChart3,
@@ -10,6 +11,8 @@ import {
   Layers,
   Calendar,
   Mountain,
+  RefreshCw,
+  Download,
 } from 'lucide-react'
 import {
   BarChart,
@@ -26,27 +29,105 @@ import {
   Pie,
   Cell,
 } from 'recharts'
+import { fetchFarmerAnalytics, exportToCSV, GRADE_COLORS } from '../../lib/analyticsService'
 import './HarvestRecords.css'
 
-const GRADE_COLORS = ['#2d5a2d', '#7bc67b', '#fbbf24']
-
 export default function HarvestRecords() {
+  const { user } = useAuth()
   const { getAllClusters, farm } = useFarm()
   const [seasonFilter, setSeasonFilter] = useState('')
   const [selectedCluster, setSelectedCluster] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [dbClusters, setDbClusters] = useState([])
+  const [harvestRecords, setHarvestRecords] = useState([])
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchData()
+    }
+  }, [user?.id])
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const data = await fetchFarmerAnalytics(user.id)
+      
+      // Process clusters with harvest data
+      const processedClusters = data.clusters?.map(c => {
+        const sd = c.stageData || {}
+        const harvests = c.harvests || []
+        const latestHarvest = harvests[0]
+        
+        return {
+          id: c.id,
+          clusterName: c.cluster_name,
+          plantStage: c.plant_stage,
+          plantCount: c.plant_count,
+          variety: c.variety,
+          stageData: {
+            variety: c.variety || sd.variety,
+            datePlanted: c.date_planted,
+            harvestSeason: sd.season || latestHarvest?.season || 'N/A',
+            predictedYield: sd.predicted_yield || 0,
+            currentYield: latestHarvest?.yield_kg || 0,
+            previousYield: sd.pre_yield_kg || 0,
+            gradeFine: latestHarvest?.grade_fine_kg || 0,
+            gradePremium: latestHarvest?.grade_premium_kg || 0,
+            gradeCommercial: latestHarvest?.grade_commercial_kg || 0,
+            fertilizerType: sd.fertilizer_type,
+            fertilizerFrequency: sd.fertilizer_frequency,
+            pesticideType: sd.pesticide_type,
+            pesticideFrequency: sd.pesticide_frequency,
+            soilPh: sd.soil_ph,
+            shadeTrees: sd.shade_trees ? 'Yes' : 'No',
+            lastHarvestedDate: latestHarvest?.harvest_date,
+            estimatedHarvestDate: sd.estimated_harvest_date,
+            estimatedFloweringDate: sd.estimated_flowering_date,
+            lastPrunedDate: sd.last_pruned_date,
+            temperature: sd.temperature,
+            rainfall: sd.rainfall,
+            humidity: sd.humidity,
+          },
+          harvests,
+        }
+      }) || []
+      
+      setDbClusters(processedClusters)
+      
+      // Flatten all harvest records for trend analysis
+      const allHarvests = processedClusters.flatMap(c => 
+        c.harvests.map(h => ({ ...h, clusterName: c.clusterName }))
+      )
+      setHarvestRecords(allHarvests)
+    } catch (err) {
+      console.error('Error fetching harvest data:', err)
+    }
+    setLoading(false)
+  }
+
+  // Combine context clusters with DB data
+  const contextClusters = getAllClusters()
+  const allClusters = dbClusters.length > 0 ? dbClusters : contextClusters
 
   // Get clusters that are ready-to-harvest, flowering, or fruit-bearing
-  const allClusters = getAllClusters()
   const harvestClusters = allClusters.filter((c) =>
-    ['ready-to-harvest', 'flowering', 'fruit-bearing'].includes(c.plantStage)
+    ['ready-to-harvest', 'flowering', 'fruit-bearing', 'Ready to Harvest', 'Flowering'].some(
+      stage => c.plantStage?.toLowerCase().includes(stage.toLowerCase().replace(/-/g, ''))
+    ) || c.harvests?.length > 0
   )
 
-  const filteredClusters = seasonFilter
-    ? harvestClusters.filter((c) => c.stageData?.harvestSeason?.includes(seasonFilter))
-    : harvestClusters
+  // Get unique seasons from both stage data and harvest records
+  const seasons = [...new Set([
+    ...allClusters.map((c) => c.stageData?.harvestSeason).filter(Boolean),
+    ...harvestRecords.map(h => h.season).filter(Boolean),
+  ])]
 
-  // Get unique seasons
-  const seasons = [...new Set(allClusters.map((c) => c.stageData?.harvestSeason).filter(Boolean))]
+  const filteredClusters = seasonFilter
+    ? harvestClusters.filter((c) => 
+        c.stageData?.harvestSeason?.includes(seasonFilter) ||
+        c.harvests?.some(h => h.season === seasonFilter)
+      )
+    : harvestClusters.length > 0 ? harvestClusters : allClusters
 
   // Generate chart data from selected cluster
   const getYieldChartData = (cluster) => {
@@ -69,8 +150,14 @@ export default function HarvestRecords() {
 
   const stageLabels = {
     'ready-to-harvest': 'Ready to Harvest',
+    'Ready to Harvest': 'Ready to Harvest',
     'flowering': 'Flowering',
+    'Flowering': 'Flowering',
     'fruit-bearing': 'Fruit-bearing',
+    'tree': 'Tree',
+    'Tree': 'Tree',
+    'seed-sapling': 'Seed/Sapling',
+    'Seed/Sapling': 'Seed/Sapling',
   }
 
   const getPlantAge = (datePlanted) => {
@@ -86,13 +173,60 @@ export default function HarvestRecords() {
   // Build yield trend data across all harvest clusters for the line chart
   const getYieldTrendData = () => {
     return filteredClusters
-      .filter((c) => c.stageData?.currentYield || c.stageData?.previousYield)
+      .filter((c) => c.stageData?.currentYield || c.stageData?.previousYield || c.stageData?.predictedYield)
       .map((c) => ({
         name: c.clusterName,
         previous: parseFloat(c.stageData?.previousYield) || 0,
         predicted: parseFloat(c.stageData?.predictedYield) || 0,
         actual: parseFloat(c.stageData?.currentYield) || 0,
       }))
+  }
+
+  // Build harvest history for trend chart
+  const getHarvestHistoryData = () => {
+    const seasonMap = {}
+    harvestRecords.forEach(h => {
+      const season = h.season || 'Unknown'
+      if (!seasonMap[season]) {
+        seasonMap[season] = { season, yield: 0, fine: 0, premium: 0, commercial: 0 }
+      }
+      seasonMap[season].yield += parseFloat(h.yield_kg || 0)
+      seasonMap[season].fine += parseFloat(h.grade_fine_kg || 0)
+      seasonMap[season].premium += parseFloat(h.grade_premium_kg || 0)
+      seasonMap[season].commercial += parseFloat(h.grade_commercial_kg || 0)
+    })
+    return Object.values(seasonMap).map(s => ({
+      ...s,
+      yield: Math.round(s.yield),
+      fine: Math.round(s.fine),
+      premium: Math.round(s.premium),
+      commercial: Math.round(s.commercial),
+    }))
+  }
+
+  const handleExport = () => {
+    const exportData = filteredClusters.map(c => ({
+      'Cluster': c.clusterName,
+      'Stage': c.plantStage,
+      'Trees': c.plantCount,
+      'Season': c.stageData?.harvestSeason || 'N/A',
+      'Previous Yield (kg)': c.stageData?.previousYield || 0,
+      'Predicted Yield (kg)': c.stageData?.predictedYield || 0,
+      'Actual Yield (kg)': c.stageData?.currentYield || 0,
+      'Fine (kg)': c.stageData?.gradeFine || 0,
+      'Premium (kg)': c.stageData?.gradePremium || 0,
+      'Commercial (kg)': c.stageData?.gradeCommercial || 0,
+    }))
+    exportToCSV(exportData, `harvest_records_${new Date().toISOString().split('T')[0]}.csv`)
+  }
+
+  if (loading) {
+    return (
+      <div className="harvest-loading">
+        <div className="harvest-loading-spinner"></div>
+        <p>Loading harvest records...</p>
+      </div>
+    )
   }
 
   return (
@@ -103,6 +237,12 @@ export default function HarvestRecords() {
           <p>Monitor historical performance and future yield predictions</p>
         </div>
         <div className="harvest-filters">
+          <button className="harvest-refresh-btn" onClick={fetchData}>
+            <RefreshCw size={16} /> Refresh
+          </button>
+          <button className="harvest-export-btn" onClick={handleExport}>
+            <Download size={16} /> Export
+          </button>
           <div className="filter-select">
             <Filter size={16} />
             <select value={seasonFilter} onChange={(e) => setSeasonFilter(e.target.value)}>
@@ -115,6 +255,39 @@ export default function HarvestRecords() {
           </div>
         </div>
       </div>
+
+      {/* Summary Charts */}
+      {harvestRecords.length > 0 && (
+        <div className="harvest-summary-charts">
+          <div className="harvest-summary-chart">
+            <h4><TrendingUp size={16} /> Yield by Season</h4>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={getHarvestHistoryData()}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="season" fontSize={11} tick={{ fill: '#64748b' }} />
+                <YAxis fontSize={11} tick={{ fill: '#64748b' }} tickFormatter={v => `${v} kg`} />
+                <Tooltip formatter={v => [`${v.toLocaleString()} kg`]} />
+                <Bar dataKey="yield" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Total Yield" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="harvest-summary-chart">
+            <h4><BarChart3 size={16} /> Grade Distribution by Season</h4>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={getHarvestHistoryData()}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="season" fontSize={11} tick={{ fill: '#64748b' }} />
+                <YAxis fontSize={11} tick={{ fill: '#64748b' }} />
+                <Tooltip formatter={v => [`${v.toLocaleString()} kg`]} />
+                <Legend />
+                <Bar dataKey="fine" stackId="a" fill={GRADE_COLORS[0]} name="Fine" />
+                <Bar dataKey="premium" stackId="a" fill={GRADE_COLORS[1]} name="Premium" />
+                <Bar dataKey="commercial" stackId="a" fill={GRADE_COLORS[2]} name="Commercial" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* Cluster List */}
       <div className="harvest-content">

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useAuth } from '../../context/AuthContext'
 import { useFarm } from '../../context/FarmContext'
 import {
   Lightbulb,
@@ -11,16 +12,19 @@ import {
   TrendingUp,
   Minus,
   X,
+  RefreshCw,
+  Download,
 } from 'lucide-react'
+import { fetchFarmerAnalytics, generateRecommendations, exportToCSV, ROBUSTA_IDEALS } from '../../lib/analyticsService'
 import './Recommendations.css'
 
-// Rules engine for identifying issues
+// Rules engine for identifying issues - enhanced to use DB data
 function analyzeCluster(cluster) {
   const issues = []
   const sd = cluster.stageData || {}
 
   // Check fertilizer
-  if (!sd.fertilizerType || sd.fertilizerType === '') {
+  if (!sd.fertilizerType && !sd.fertilizer_type) {
     issues.push({
       factor: 'Insufficient fertilizer application',
       severity: 'high',
@@ -30,7 +34,8 @@ function analyzeCluster(cluster) {
   }
 
   // Check pesticide
-  if (!sd.pesticideFrequency || sd.pesticideFrequency === '') {
+  const pestFreq = sd.pesticideFrequency || sd.pesticide_frequency
+  if (!pestFreq) {
     issues.push({
       factor: 'Lack of pesticide use',
       severity: 'medium',
@@ -40,7 +45,8 @@ function analyzeCluster(cluster) {
   }
 
   // Check pruning
-  if (!sd.lastPrunedDate || sd.lastPrunedDate === '') {
+  const lastPruned = sd.lastPrunedDate || sd.last_pruned_date
+  if (!lastPruned) {
     issues.push({
       factor: 'Delayed or missed pruning',
       severity: 'medium',
@@ -50,20 +56,21 @@ function analyzeCluster(cluster) {
   }
 
   // Check soil pH
-  const pH = parseFloat(sd.soilPh)
-  if (pH && (pH < 5.5 || pH > 6.5)) {
+  const pH = parseFloat(sd.soilPh || sd.soil_ph)
+  if (pH && (pH < ROBUSTA_IDEALS.soilPh.min || pH > ROBUSTA_IDEALS.soilPh.max)) {
     issues.push({
       factor: 'Extreme or imbalanced soil pH',
       severity: pH < 5.0 || pH > 7.0 ? 'high' : 'medium',
-      explanation: `Soil pH is ${pH}. Coffee thrives in slightly acidic soil (pH 5.5-6.5). Current pH may affect nutrient uptake.`,
-      recommendation: pH < 5.5
+      explanation: `Soil pH is ${pH}. Coffee thrives in slightly acidic soil (pH ${ROBUSTA_IDEALS.soilPh.min}-${ROBUSTA_IDEALS.soilPh.max}). Current pH may affect nutrient uptake.`,
+      recommendation: pH < ROBUSTA_IDEALS.soilPh.min
         ? 'Apply agricultural lime to raise soil pH. Test soil every 6 months to monitor changes.'
         : 'Apply sulfur or organic matter to lower soil pH. Ensure proper drainage to prevent alkalinity buildup.',
     })
   }
 
   // Check shade trees
-  if (sd.shadeTrees === 'No') {
+  const shadeTrees = sd.shadeTrees || sd.shade_trees
+  if (shadeTrees === 'No' || shadeTrees === false) {
     issues.push({
       factor: 'Poor shade tree management',
       severity: 'low',
@@ -73,21 +80,21 @@ function analyzeCluster(cluster) {
   }
 
   // Check temperature
-  const temp = parseFloat(sd.monthlyTemperature)
-  if (temp && (temp < 15 || temp > 30)) {
+  const temp = parseFloat(sd.monthlyTemperature || sd.temperature)
+  if (temp && (temp < ROBUSTA_IDEALS.temperature.min || temp > ROBUSTA_IDEALS.temperature.max)) {
     issues.push({
       factor: 'Weather or climate stress',
       severity: 'medium',
-      explanation: `Monthly temperature is ${temp}°C. Optimal range for coffee is 15-28°C.`,
-      recommendation: temp > 30
+      explanation: `Monthly temperature is ${temp}°C. Optimal range for coffee is ${ROBUSTA_IDEALS.temperature.min}-${ROBUSTA_IDEALS.temperature.max}°C.`,
+      recommendation: temp > ROBUSTA_IDEALS.temperature.max
         ? 'Increase shade coverage. Consider mulching to reduce soil temperature. Plant windbreaks if exposed to hot winds.'
         : 'Protect young plants with covers during cold periods. Avoid planting in frost-prone areas.',
     })
   }
 
   // Check yield decline
-  const prevYield = parseFloat(sd.previousYield)
-  const currentYield = parseFloat(sd.currentYield)
+  const prevYield = parseFloat(sd.previousYield || sd.pre_yield_kg)
+  const currentYield = parseFloat(sd.currentYield || sd.actual_yield)
   if (prevYield && currentYield && currentYield < prevYield * 0.7) {
     issues.push({
       factor: 'Significant yield decline detected',
@@ -99,12 +106,12 @@ function analyzeCluster(cluster) {
 
   // Check humidity
   const humidity = parseFloat(sd.humidity)
-  if (humidity && (humidity < 60 || humidity > 70)) {
+  if (humidity && (humidity < ROBUSTA_IDEALS.humidity.min || humidity > ROBUSTA_IDEALS.humidity.max)) {
     issues.push({
       factor: 'Non-optimal humidity level',
       severity: humidity < 40 || humidity > 85 ? 'high' : 'low',
-      explanation: `Average humidity is ${humidity}%. Optimal range for coffee is 60–70%.`,
-      recommendation: humidity < 60
+      explanation: `Average humidity is ${humidity}%. Optimal range for coffee is ${ROBUSTA_IDEALS.humidity.min}–${ROBUSTA_IDEALS.humidity.max}%.`,
+      recommendation: humidity < ROBUSTA_IDEALS.humidity.min
         ? 'Increase mulching around plant bases to retain soil moisture. Consider installing shade structures to reduce evaporation.'
         : 'Improve air circulation through pruning. Ensure adequate spacing between trees. Monitor for fungal diseases common in high-humidity conditions.',
     })
@@ -112,29 +119,31 @@ function analyzeCluster(cluster) {
 
   // Check rainfall
   const rainfall = parseFloat(sd.rainfall)
-  if (rainfall && (rainfall < 100 || rainfall > 250)) {
+  if (rainfall && (rainfall < ROBUSTA_IDEALS.rainfall.min || rainfall > ROBUSTA_IDEALS.rainfall.max)) {
     issues.push({
       factor: 'Abnormal rainfall levels',
       severity: rainfall < 50 || rainfall > 350 ? 'high' : 'medium',
-      explanation: `Monthly rainfall is ${rainfall}mm. Coffee generally needs 100–250mm of monthly rainfall for healthy growth.`,
-      recommendation: rainfall < 100
+      explanation: `Monthly rainfall is ${rainfall}mm. Coffee generally needs ${ROBUSTA_IDEALS.rainfall.min}–${ROBUSTA_IDEALS.rainfall.max}mm of monthly rainfall for healthy growth.`,
+      recommendation: rainfall < ROBUSTA_IDEALS.rainfall.min
         ? 'Consider supplemental irrigation during dry spells. Apply mulch to conserve soil moisture.'
         : 'Ensure proper drainage to prevent waterlogging and root rot. Check for erosion on slopes.',
     })
   }
 
   // Check fertilizer frequency
-  if (sd.fertilizerFrequency === 'Never' || sd.fertilizerFrequency === 'Rarely') {
+  const fertFreq = sd.fertilizerFrequency || sd.fertilizer_frequency
+  if (fertFreq === 'Never' || fertFreq === 'Rarely') {
     issues.push({
       factor: 'Infrequent fertilizer application',
-      severity: sd.fertilizerFrequency === 'Never' ? 'high' : 'medium',
-      explanation: `Fertilizer application is "${sd.fertilizerFrequency}". Inadequate fertilization leads to nutrient deficiency and reduced yields.`,
+      severity: fertFreq === 'Never' ? 'high' : 'medium',
+      explanation: `Fertilizer application is "${fertFreq}". Inadequate fertilization leads to nutrient deficiency and reduced yields.`,
       recommendation: 'Apply fertilizer at least once a year. Recommended schedule: NPK at start of rainy season, and organic compost mid-season. Increase to 3-4 times per year for mature bearing trees.',
     })
   }
 
   // Check pesticide type missing
-  if (sd.pesticideFrequency && sd.pesticideFrequency !== 'Never' && !sd.pesticideType) {
+  const pestType = sd.pesticideType || sd.pesticide_type
+  if (pestFreq && pestFreq !== 'Never' && !pestType) {
     issues.push({
       factor: 'Pesticide type not specified',
       severity: 'low',
@@ -157,12 +166,66 @@ function getPerformanceLevel(cluster) {
 }
 
 export default function Recommendations() {
+  const { user } = useAuth()
   const { getAllClusters } = useFarm()
   const [performanceFilter, setPerformanceFilter] = useState('')
   const [seasonFilter, setSeasonFilter] = useState('')
   const [selectedCluster, setSelectedCluster] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [dbClusters, setDbClusters] = useState([])
 
-  const allClusters = getAllClusters()
+  useEffect(() => {
+    if (user?.id) {
+      fetchData()
+    }
+  }, [user?.id])
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const data = await fetchFarmerAnalytics(user.id)
+      
+      // Process clusters from DB
+      const processed = data.clusters?.map(c => {
+        const sd = c.stageData || {}
+        return {
+          id: c.id,
+          clusterName: c.cluster_name,
+          plantStage: c.plant_stage,
+          plantCount: c.plant_count,
+          variety: c.variety,
+          stageData: {
+            variety: c.variety || sd.variety,
+            datePlanted: c.date_planted,
+            harvestSeason: sd.season,
+            predictedYield: sd.predicted_yield,
+            currentYield: c.latestHarvest?.yield_kg || 0,
+            previousYield: sd.pre_yield_kg,
+            temperature: sd.temperature,
+            humidity: sd.humidity,
+            rainfall: sd.rainfall,
+            soil_ph: sd.soil_ph,
+            fertilizer_type: sd.fertilizer_type,
+            fertilizer_frequency: sd.fertilizer_frequency,
+            pesticide_type: sd.pesticide_type,
+            pesticide_frequency: sd.pesticide_frequency,
+            shade_trees: sd.shade_trees,
+            last_pruned_date: sd.last_pruned_date,
+          },
+        }
+      }) || []
+      
+      setDbClusters(processed)
+    } catch (err) {
+      console.error('Error fetching data:', err)
+    }
+    setLoading(false)
+  }
+
+  // Combine context and DB clusters
+  const contextClusters = getAllClusters()
+  const allClusters = dbClusters.length > 0 ? dbClusters : contextClusters
+  
   const clustersWithAnalysis = allClusters.map((c) => ({
     ...c,
     issues: analyzeCluster(c),
@@ -202,6 +265,28 @@ export default function Recommendations() {
   const moderateCount = clustersWithAnalysis.filter((c) => c.performance === 'moderate').length
   const goodCount = clustersWithAnalysis.filter((c) => c.performance === 'good').length
 
+  const handleExport = () => {
+    const exportData = filtered.map(c => ({
+      'Cluster': c.clusterName,
+      'Stage': c.plantStage,
+      'Performance': c.performance,
+      'Issues Count': c.issues.length,
+      'High Severity': c.issues.filter(i => i.severity === 'high').length,
+      'Medium Severity': c.issues.filter(i => i.severity === 'medium').length,
+      'Low Severity': c.issues.filter(i => i.severity === 'low').length,
+    }))
+    exportToCSV(exportData, `recommendations_${new Date().toISOString().split('T')[0]}.csv`)
+  }
+
+  if (loading) {
+    return (
+      <div className="reco-loading">
+        <div className="reco-loading-spinner"></div>
+        <p>Analyzing clusters...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="reco-page">
       <div className="reco-header">
@@ -210,6 +295,12 @@ export default function Recommendations() {
           <p>Actionable insights to improve yield and farm management</p>
         </div>
         <div className="harvest-filters">
+          <button className="reco-refresh-btn" onClick={fetchData}>
+            <RefreshCw size={16} /> Refresh
+          </button>
+          <button className="reco-export-btn" onClick={handleExport}>
+            <Download size={16} /> Export
+          </button>
           <div className="filter-select">
             <Filter size={16} />
             <select value={seasonFilter} onChange={(e) => setSeasonFilter(e.target.value)}>
