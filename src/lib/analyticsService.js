@@ -16,6 +16,14 @@ export function arrLastFloat(arr) {
   return parseFloat(arrLast(arr)) || 0
 }
 
+// Returns every element EXCEPT the last (the monthly picks, not the season total)
+// Use this for intra-season trend visualizations.
+export function arrPicks(arr) {
+  if (Array.isArray(arr) && arr.length > 1) return arr.slice(0, -1)
+  if (Array.isArray(arr) && arr.length === 1) return arr
+  return []
+}
+
 // Constants for Robusta ideal ranges
 export const ROBUSTA_IDEALS = {
   elevation_m: { min: 600, max: 1200 },
@@ -138,20 +146,22 @@ export async function fetchAdminAnalytics() {
       )[0] || {}
 
       const clusterHarvests = (harvests || []).filter(h => h.cluster_id === cluster.id)
-      const latestHarvest = clusterHarvests.sort((a, b) => 
-        new Date(b.actual_harvest_date) - new Date(a.actual_harvest_date)
-      )[0] || {}
+        .sort((a, b) => new Date(b.actual_harvest_date) - new Date(a.actual_harvest_date))
+      const latestHarvest = clusterHarvests[0] || {}
+      // Second-most-recent record is the "previous" season for yield comparison
+      const previousHarvest = clusterHarvests[1] || null
 
       // Handle both array and object farm data
       const farm = Array.isArray(cluster.farms) ? cluster.farms[0] : cluster.farms
       const farmer = farm?.users ? (Array.isArray(farm.users) ? farm.users[0] : farm.users) : null
 
       const latestYield = arrLastFloat(latestHarvest.yield_kg)
+      // Prefer the previous harvest record's season total; fall back to stage data pre_yield_kg
+      const previousHarvestYield = previousHarvest
+        ? arrLastFloat(previousHarvest.yield_kg)
+        : (parseFloat(latestStage.pre_yield_kg) || 0)
 
-      const risk = getRiskLevel(
-        latestYield,
-        parseFloat(latestStage.pre_yield_kg) || 0
-      )
+      const risk = getRiskLevel(latestYield, previousHarvestYield)
 
       return {
         ...cluster,
@@ -159,12 +169,15 @@ export async function fetchAdminAnalytics() {
         farmer,
         stageData: latestStage,
         latestHarvest,
+        previousHarvest,
+        previousHarvestYield,
         allHarvests: clusterHarvests,
         allStageData: stageData,
         riskLevel: risk.level,
         priority: risk.priority,
-        yieldDecline: latestStage.pre_yield_kg > 0
-          ? (((latestStage.pre_yield_kg - latestYield) / latestStage.pre_yield_kg) * 100).toFixed(1)
+        yieldStatus: getYieldStatus(latestYield, previousHarvestYield),
+        yieldDecline: previousHarvestYield > 0
+          ? (((previousHarvestYield - latestYield) / previousHarvestYield) * 100).toFixed(1)
           : 0,
       }
     })
@@ -193,10 +206,12 @@ export async function fetchAdminAnalytics() {
         gradeCommercial += arrLastFloat(h.grade_commercial)
       })
 
+      // previousHarvestYield is the season total of the prior harvest record (per cluster)
+      totalPrevious += cluster.previousHarvestYield || 0
+
       const stageData = cluster.allStageData || []
       stageData.forEach(sd => {
         totalPredicted += parseFloat(sd.predicted_yield) || 0
-        totalPrevious += parseFloat(sd.pre_yield_kg) || 0
       })
     })
 
@@ -303,31 +318,30 @@ export async function fetchFarmerAnalytics(userId) {
       )[0] || {}
 
       const clusterHarvests = (harvests || []).filter(h => h.cluster_id === cluster.id)
-      const latestHarvest = clusterHarvests.sort((a, b) =>
-        new Date(b.actual_harvest_date) - new Date(a.actual_harvest_date)
-      )[0] || {}
+        .sort((a, b) => new Date(b.actual_harvest_date) - new Date(a.actual_harvest_date))
+      const latestHarvest = clusterHarvests[0] || {}
+      const previousHarvest = clusterHarvests[1] || null
 
       const latestYield = arrLastFloat(latestHarvest.yield_kg)
+      const previousHarvestYield = previousHarvest
+        ? arrLastFloat(previousHarvest.yield_kg)
+        : (parseFloat(latestStage.pre_yield_kg) || 0)
 
-      const risk = getRiskLevel(
-        latestYield,
-        parseFloat(latestStage.pre_yield_kg) || 0
-      )
+      const risk = getRiskLevel(latestYield, previousHarvestYield)
 
       return {
         ...cluster,
         stageData: latestStage,
         latestHarvest,
+        previousHarvest,
+        previousHarvestYield,
         allHarvests: clusterHarvests,
         allStageData: stageData,
         riskLevel: risk.level,
         priority: risk.priority,
-        yieldStatus: getYieldStatus(
-          latestYield,
-          parseFloat(latestStage.pre_yield_kg) || 0
-        ),
-        yieldDecline: latestStage.pre_yield_kg > 0
-          ? (((latestStage.pre_yield_kg - latestYield) / latestStage.pre_yield_kg) * 100).toFixed(1)
+        yieldStatus: getYieldStatus(latestYield, previousHarvestYield),
+        yieldDecline: previousHarvestYield > 0
+          ? (((previousHarvestYield - latestYield) / previousHarvestYield) * 100).toFixed(1)
           : 0,
       }
     })
@@ -349,10 +363,11 @@ export async function fetchFarmerAnalytics(userId) {
         gradeCommercial += arrLastFloat(h.grade_commercial)
       })
 
+      totalPrevious += cluster.previousHarvestYield || 0
+
       const stageData = cluster.allStageData || []
       stageData.forEach(sd => {
         totalPredicted += parseFloat(sd.predicted_yield) || 0
-        totalPrevious += parseFloat(sd.pre_yield_kg) || 0
       })
     })
 

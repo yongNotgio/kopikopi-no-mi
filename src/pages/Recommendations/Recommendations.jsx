@@ -140,9 +140,9 @@ function analyzeCluster(cluster) {
     })
   }
 
-  // Check yield decline
-  const prevYield = parseFloat(sd.preYieldKg || sd.pre_yield_kg)
-  const currentYield = parseFloat(sd.actualYield || sd.actual_yield)
+  // Check yield decline against previous harvest record's total
+  const prevYield = parseFloat(sd.previousYield || sd.preYieldKg || sd.pre_yield_kg)
+  const currentYield = parseFloat(sd.currentYield || sd.actualYield || sd.actual_yield)
   if (prevYield && currentYield && currentYield < prevYield * 0.8) {
     issues.push({
       factor: 'yield_decline',
@@ -203,7 +203,7 @@ export default function Recommendations() {
             harvestSeason: sd.season,
             predictedYield: sd.predicted_yield,
             currentYield: arrLastFloat(c.latestHarvest?.yield_kg),
-            previousYield: sd.pre_yield_kg,
+            previousYield: c.previousHarvestYield || sd.pre_yield_kg || 0,
             avgTempC: sd.avgTempC || sd.avg_temp_c,
             avgHumidityPct: sd.avgHumidityPct || sd.avg_humidity_pct,
             avgRainfallMm: sd.avgRainfallMm || sd.avg_rainfall_mm,

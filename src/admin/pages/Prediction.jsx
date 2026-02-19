@@ -59,7 +59,8 @@ export default function Prediction() {
                 // Get data from latest stage data
                 const sd = c.stageData || {}
                 const predicted = parseFloat(sd.predicted_yield || 0)
-                const previous = parseFloat(sd.pre_yield_kg || 0)
+                // Prefer previous harvest record total; fall back to stage data pre_yield_kg
+                const previous = c.previousHarvestYield || parseFloat(sd.pre_yield_kg || 0)
                 
                 // Get actual from latest harvest
                 const actual = c.latestHarvest ? arrLastFloat(c.latestHarvest.yield_kg) : 0

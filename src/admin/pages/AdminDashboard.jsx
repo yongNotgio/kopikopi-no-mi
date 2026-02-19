@@ -131,7 +131,8 @@ export default function AdminDashboard() {
                         avgHumidity: c.stageData?.avg_humidity_pct || 'N/A',
                         predictedYield: parseFloat(c.stageData?.predicted_yield) || 0,
                         actualYield: arrLastFloat(c.latestHarvest?.yield_kg),
-                        previousYield: parseFloat(c.stageData?.pre_yield_kg) || 0,
+                        // Use the actual previous harvest record's total, not stage data pre_yield_kg
+                        previousYield: c.previousHarvestYield || parseFloat(c.stageData?.pre_yield_kg) || 0,
                         plantStage: c.plant_stage,
                         plantCount: c.plant_count,
                         defectCount: c.stageData?.defect_count || 0,

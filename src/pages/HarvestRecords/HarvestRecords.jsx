@@ -29,7 +29,7 @@ import {
   Pie,
   Cell,
 } from 'recharts'
-import { fetchFarmerAnalytics, exportToCSV, GRADE_COLORS, arrLastFloat } from '../../lib/analyticsService'
+import { fetchFarmerAnalytics, exportToCSV, GRADE_COLORS, arrLastFloat, arrPicks } from '../../lib/analyticsService'
 import './HarvestRecords.css'
 
 export default function HarvestRecords() {
@@ -71,7 +71,9 @@ export default function HarvestRecords() {
             harvestSeason: sd.season || latestHarvest?.season || 'N/A',
             predictedYield: sd.predicted_yield || 0,
             currentYield: arrLastFloat(latestHarvest?.yield_kg),
-            previousYield: sd.pre_yield_kg || 0,
+            // Derive previous yield from the actual previous harvest record, not stage data
+            previousYield: c.previousHarvestYield || sd.pre_yield_kg || 0,
+            previousSeason: c.previousHarvest?.season || null,
             gradeFine: arrLastFloat(latestHarvest?.grade_fine),
             gradePremium: arrLastFloat(latestHarvest?.grade_premium),
             gradeCommercial: arrLastFloat(latestHarvest?.grade_commercial),
@@ -132,34 +134,34 @@ export default function HarvestRecords() {
       )
     : harvestClusters.length > 0 ? harvestClusters : allClusters
 
-  // Build monthly trend data from array columns for the selected cluster
+  // Build monthly picks data (all array entries EXCEPT last = the monthly picks within one season)
   const getMonthlyTrendData = (cluster) => {
     if (!cluster?.harvests?.length) return []
-    // Use the latest harvest record's arrays
-    const latest = cluster.harvests.sort((a, b) =>
-      new Date(b.actual_harvest_date) - new Date(a.actual_harvest_date)
-    )[0]
+    const latest = cluster.harvests[0]
     if (!latest || !Array.isArray(latest.yield_kg)) return []
 
-    // Build monthly data points (exclude last element = season total)
-    const months = latest.yield_kg.length > 1 ? latest.yield_kg.length - 1 : latest.yield_kg.length
-    return Array.from({ length: months }, (_, i) => ({
+    const picks = arrPicks(latest.yield_kg)
+    return picks.map((val, i) => ({
       month: `Pick ${i + 1}`,
-      yield: parseFloat(latest.yield_kg[i]) || 0,
-      fine: parseFloat(latest.grade_fine?.[i]) || 0,
-      premium: parseFloat(latest.grade_premium?.[i]) || 0,
-      commercial: parseFloat(latest.grade_commercial?.[i]) || 0,
+      yield: parseFloat(val) || 0,
+      fine: parseFloat(arrPicks(latest.grade_fine)[i]) || 0,
+      premium: parseFloat(arrPicks(latest.grade_premium)[i]) || 0,
+      commercial: parseFloat(arrPicks(latest.grade_commercial)[i]) || 0,
     }))
   }
 
-  // Generate chart data from selected cluster
-  const getYieldChartData = (cluster) => {
-    if (!cluster?.stageData) return []
-    return [
-      { name: 'Previous', yield: parseFloat(cluster.stageData.previousYield) || 0 },
-      { name: 'Predicted', yield: parseFloat(cluster.stageData.predictedYield) || 0 },
-      { name: 'Actual', yield: parseFloat(cluster.stageData.currentYield) || 0 },
-    ]
+  // Build season history chart — all harvest records for the cluster, oldest first
+  const getSeasonHistoryData = (cluster) => {
+    if (!cluster?.harvests?.length) return []
+    return [...cluster.harvests]
+      .sort((a, b) => new Date(a.actual_harvest_date || 0) - new Date(b.actual_harvest_date || 0))
+      .map(h => ({
+        season: h.season || h.actual_harvest_date?.slice(0, 7) || 'Unknown',
+        yield: arrLastFloat(h.yield_kg),
+        fine: arrLastFloat(h.grade_fine),
+        premium: arrLastFloat(h.grade_premium),
+        commercial: arrLastFloat(h.grade_commercial),
+      }))
   }
 
   const getGradeData = (cluster) => {
@@ -415,7 +417,7 @@ export default function HarvestRecords() {
                   <div className="yield-card-large">
                     <div className="yield-card-header">
                       <span className="yield-label">Previous Yield</span>
-                      <span className="yield-season">{selectedCluster.stageData?.harvestSeason || 'N/A'}</span>
+                      <span className="yield-season">{selectedCluster.stageData?.previousSeason || selectedCluster.stageData?.harvestSeason || 'Prior Season'}</span>
                     </div>
                     <span className="yield-value-large">{selectedCluster.stageData?.previousYield || '0'}</span>
                     <span className="yield-unit">kg</span>
@@ -592,25 +594,35 @@ export default function HarvestRecords() {
                 </div>
               )}
 
-              {/* Charts */}
+              {/* Charts — Yield History (past harvests) vs Forecast */}
               <div className="detail-section">
-                <h4>Analytics & Forecast Charts</h4>
+                <h4><TrendingUp size={16} /> Yield History & Forecast</h4>
                 <div className="charts-grid">
+
+                  {/* Season Yield History — all past harvest records for this cluster */}
                   <div className="chart-card">
-                    <h5>Yield Comparison (Predicted vs Actual)</h5>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <BarChart data={getYieldChartData(selectedCluster)}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" fontSize={12} />
-                        <YAxis fontSize={12} />
-                        <Tooltip />
-                        <Bar dataKey="yield" fill="var(--primary)" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <h5>Harvest Season History (kg)</h5>
+                    {getSeasonHistoryData(selectedCluster).length > 0 ? (
+                      <ResponsiveContainer width="100%" height={220}>
+                        <BarChart data={getSeasonHistoryData(selectedCluster)}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="season" fontSize={11} tick={{ fill: '#64748b' }} />
+                          <YAxis fontSize={11} tickFormatter={v => `${v} kg`} />
+                          <Tooltip formatter={v => [`${Number(v).toFixed(1)} kg`]} />
+                          <Legend />
+                          <Bar dataKey="fine" stackId="g" fill={GRADE_COLORS[0]} name="Fine" />
+                          <Bar dataKey="premium" stackId="g" fill={GRADE_COLORS[1]} name="Premium" />
+                          <Bar dataKey="commercial" stackId="g" fill={GRADE_COLORS[2]} name="Commercial" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="chart-empty">No harvest history yet</div>
+                    )}
                   </div>
 
+                  {/* Grade Distribution for latest season */}
                   <div className="chart-card">
-                    <h5>Grade Distribution</h5>
+                    <h5>Grade Distribution (Latest Season)</h5>
                     {getGradeData(selectedCluster).length > 0 ? (
                       <ResponsiveContainer width="100%" height={220}>
                         <PieChart>

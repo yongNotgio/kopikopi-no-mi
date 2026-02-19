@@ -15,7 +15,7 @@ import {
     Minus,
 } from 'lucide-react'
 import {
-    BarChart, Bar, PieChart as RechartPie, Pie, Cell,
+    BarChart, Bar, LineChart, Line, PieChart as RechartPie, Pie, Cell,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { fetchFarmerAnalytics, exportToCSV, GRADE_COLORS, STATUS_COLORS, getYieldStatus, arrLastFloat } from '../../lib/analyticsService'
@@ -36,6 +36,8 @@ export default function Analytics() {
         gradeDistribution: [],
         gradeBySeasonData: [],
         yieldStatusCounts: {},
+        clusterYieldHistory: [],
+        clusterNames: [],
     })
     const [refreshKey, setRefreshKey] = useState(0)
 
@@ -76,9 +78,9 @@ export default function Analytics() {
                         gradeCommercial += arrLastFloat(h.grade_commercial)
                     })
 
-                    // Check for yield drop vs previous
+                    // Use previous harvest record's total for yield drop detection
                     const currentYield = arrLastFloat(c.latestHarvest?.yield_kg)
-                    const previousYield = c.stageData?.pre_yield_kg || 0
+                    const previousYield = c.previousHarvestYield || 0
                     if (previousYield > 0) {
                         totalWithPrevious++
                         const status = getYieldStatus(currentYield, previousYield)
@@ -111,6 +113,27 @@ export default function Analytics() {
                     commercial: t.commercial || 0,
                 }))
 
+                // Build per-cluster yield history: each cluster contributes all past season totals
+                // sorted oldest-first, keyed by cluster name. Used for multi-line history chart.
+                const allSeasons = [...new Set(
+                    (data.clusters || []).flatMap(c =>
+                        (c.allHarvests || []).map(h => h.season || h.actual_harvest_date?.slice(0, 7) || 'Unknown')
+                    )
+                )].sort()
+
+                const clusterYieldHistory = allSeasons.map(season => {
+                    const entry = { season }
+                    ;(data.clusters || []).forEach(c => {
+                        const match = (c.allHarvests || []).find(h =>
+                            (h.season || h.actual_harvest_date?.slice(0, 7) || 'Unknown') === season
+                        )
+                        entry[c.cluster_name || c.id] = match ? arrLastFloat(match.yield_kg) : null
+                    })
+                    return entry
+                })
+
+                const clusterNames = (data.clusters || []).map(c => c.cluster_name || c.id)
+
                 if (!isMounted) return
 
                 setAnalyticsData({
@@ -124,6 +147,8 @@ export default function Analytics() {
                     gradeDistribution,
                     gradeBySeasonData,
                     yieldStatusCounts,
+                    clusterYieldHistory,
+                    clusterNames,
                 })
             } catch (err) {
                 console.error('Error fetching analytics:', err)
@@ -316,6 +341,39 @@ export default function Analytics() {
                     </ResponsiveContainer>
                 </div>
             </div>
+
+            {/* Per-Cluster Yield History — shows each cluster's season totals over time */}
+            {analyticsData.clusterYieldHistory.length > 1 && (
+                <div className="analytics-charts-grid">
+                    <div className="analytics-chart-card" style={{ gridColumn: '1 / -1' }}>
+                        <h3><TrendingUp size={18} /> Per-Cluster Yield History</h3>
+                        <p>Season totals per cluster derived from harvest records — this is historical yield, not a prediction</p>
+                        <ResponsiveContainer width="100%" height={300}>
+                            <LineChart data={analyticsData.clusterYieldHistory}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                <XAxis dataKey="season" fontSize={12} tick={{ fill: '#64748b' }} />
+                                <YAxis fontSize={12} tick={{ fill: '#64748b' }} tickFormatter={v => `${v} kg`} />
+                                <Tooltip
+                                    contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
+                                    formatter={(val, name) => val != null ? [`${Number(val).toLocaleString()} kg`, name] : ['—', name]}
+                                />
+                                <Legend />
+                                {analyticsData.clusterNames.map((name, i) => (
+                                    <Line
+                                        key={name}
+                                        type="monotone"
+                                        dataKey={name}
+                                        stroke={['#4A7C59', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'][i % 6]}
+                                        strokeWidth={2}
+                                        dot={{ r: 4 }}
+                                        connectNulls={false}
+                                    />
+                                ))}
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            )}
 
             {/* Yield Status Metrics (Streamlit Yield Drop Detection) */}
             <div className="analytics-status-section">
