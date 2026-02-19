@@ -5,7 +5,7 @@ import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import './FarmFormModal.css'
 
 export default function FarmFormModal({ onClose, editData }) {
-  const { addFarm, updateFarm } = useFarm()
+  const { setFarmInfo } = useFarm()
   const [form, setForm] = useState(
     editData || {
       farmName: '',
@@ -20,7 +20,9 @@ export default function FarmFormModal({ onClose, editData }) {
 
   useEffect(() => {
     const initialData = editData || { farmName: '', farmArea: '', elevation: '', plantVariety: '', overallTreeCount: '' }
-    const hasChanges = JSON.stringify(form) !== JSON.stringify(initialData)
+    // Compare only the fields we care about (ignore id)
+    const compare = (obj) => ({ farmName: obj.farmName, farmArea: obj.farmArea, elevation: obj.elevation, plantVariety: obj.plantVariety, overallTreeCount: obj.overallTreeCount })
+    const hasChanges = JSON.stringify(compare(form)) !== JSON.stringify(compare(initialData))
     setIsDirty(hasChanges)
   }, [form, editData])
 
@@ -28,14 +30,10 @@ export default function FarmFormModal({ onClose, editData }) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.farmName || !form.farmArea) return
-    if (editData) {
-      updateFarm(editData.id, form)
-    } else {
-      addFarm(form)
-    }
+    await setFarmInfo(form)
     onClose()
   }
 
@@ -83,7 +81,7 @@ export default function FarmFormModal({ onClose, editData }) {
               />
             </div>
             <div className="form-group">
-              <label>Elevation (meters)</label>
+              <label>Elevation (MASL)</label>
               <input
                 name="elevation"
                 type="number"

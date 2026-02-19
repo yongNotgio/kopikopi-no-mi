@@ -97,6 +97,52 @@ function analyzeCluster(cluster) {
     })
   }
 
+  // Check humidity
+  const humidity = parseFloat(sd.humidity)
+  if (humidity && (humidity < 60 || humidity > 70)) {
+    issues.push({
+      factor: 'Non-optimal humidity level',
+      severity: humidity < 40 || humidity > 85 ? 'high' : 'low',
+      explanation: `Average humidity is ${humidity}%. Optimal range for coffee is 60–70%.`,
+      recommendation: humidity < 60
+        ? 'Increase mulching around plant bases to retain soil moisture. Consider installing shade structures to reduce evaporation.'
+        : 'Improve air circulation through pruning. Ensure adequate spacing between trees. Monitor for fungal diseases common in high-humidity conditions.',
+    })
+  }
+
+  // Check rainfall
+  const rainfall = parseFloat(sd.rainfall)
+  if (rainfall && (rainfall < 100 || rainfall > 250)) {
+    issues.push({
+      factor: 'Abnormal rainfall levels',
+      severity: rainfall < 50 || rainfall > 350 ? 'high' : 'medium',
+      explanation: `Monthly rainfall is ${rainfall}mm. Coffee generally needs 100–250mm of monthly rainfall for healthy growth.`,
+      recommendation: rainfall < 100
+        ? 'Consider supplemental irrigation during dry spells. Apply mulch to conserve soil moisture.'
+        : 'Ensure proper drainage to prevent waterlogging and root rot. Check for erosion on slopes.',
+    })
+  }
+
+  // Check fertilizer frequency
+  if (sd.fertilizerFrequency === 'Never' || sd.fertilizerFrequency === 'Rarely') {
+    issues.push({
+      factor: 'Infrequent fertilizer application',
+      severity: sd.fertilizerFrequency === 'Never' ? 'high' : 'medium',
+      explanation: `Fertilizer application is "${sd.fertilizerFrequency}". Inadequate fertilization leads to nutrient deficiency and reduced yields.`,
+      recommendation: 'Apply fertilizer at least once a year. Recommended schedule: NPK at start of rainy season, and organic compost mid-season. Increase to 3-4 times per year for mature bearing trees.',
+    })
+  }
+
+  // Check pesticide type missing
+  if (sd.pesticideFrequency && sd.pesticideFrequency !== 'Never' && !sd.pesticideType) {
+    issues.push({
+      factor: 'Pesticide type not specified',
+      severity: 'low',
+      explanation: 'Pesticide application frequency is recorded but the type (Organic/Non-Organic) is not specified.',
+      recommendation: 'Record the pesticide type for better tracking. Consider switching to organic pesticides where possible for sustainable farming.',
+    })
+  }
+
   return issues
 }
 
@@ -113,6 +159,7 @@ function getPerformanceLevel(cluster) {
 export default function Recommendations() {
   const { getAllClusters } = useFarm()
   const [performanceFilter, setPerformanceFilter] = useState('')
+  const [seasonFilter, setSeasonFilter] = useState('')
   const [selectedCluster, setSelectedCluster] = useState(null)
 
   const allClusters = getAllClusters()
@@ -122,15 +169,22 @@ export default function Recommendations() {
     performance: getPerformanceLevel(c),
   }))
 
+  // Get unique seasons
+  const seasons = [...new Set(allClusters.map((c) => c.stageData?.harvestSeason).filter(Boolean))]
+
   // Sort by urgency
   const sortOrder = { poor: 0, moderate: 1, good: 2 }
   const sorted = [...clustersWithAnalysis].sort(
     (a, b) => sortOrder[a.performance] - sortOrder[b.performance]
   )
 
-  const filtered = performanceFilter
+  let filtered = performanceFilter
     ? sorted.filter((c) => c.performance === performanceFilter)
     : sorted
+
+  if (seasonFilter) {
+    filtered = filtered.filter((c) => c.stageData?.harvestSeason?.includes(seasonFilter))
+  }
 
   const perfConfig = {
     poor: { label: 'Poor', icon: TrendingDown, color: '#dc2626', bg: '#fef2f2' },
@@ -156,6 +210,16 @@ export default function Recommendations() {
           <p>Actionable insights to improve yield and farm management</p>
         </div>
         <div className="harvest-filters">
+          <div className="filter-select">
+            <Filter size={16} />
+            <select value={seasonFilter} onChange={(e) => setSeasonFilter(e.target.value)}>
+              <option value="">All Seasons</option>
+              {seasons.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <ChevronDown size={14} />
+          </div>
           <div className="filter-select">
             <Filter size={16} />
             <select value={performanceFilter} onChange={(e) => setPerformanceFilter(e.target.value)}>

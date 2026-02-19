@@ -62,7 +62,7 @@ export default function Register() {
       <div className="auth-left">
         <div className="auth-brand">
           <Sprout size={48} />
-          <h1>PAUL KALDI</h1>
+          <h1>IKAPE</h1>
           <p>Coffee Farm Management System</p>
         </div>
         <div className="auth-illustration">

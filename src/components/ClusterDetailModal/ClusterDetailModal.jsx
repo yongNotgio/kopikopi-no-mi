@@ -4,88 +4,107 @@ import { X, Save } from 'lucide-react'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 import '../FarmFormModal/FarmFormModal.css'
 
+const VARIETY_OPTIONS = ['Robusta', 'Arabica', 'Liberica', 'Excelsa', 'Others']
+const FERTILIZER_TYPE_OPTIONS = ['Organic', 'Non-Organic']
+const FERTILIZER_FREQ_OPTIONS = [
+  { value: 'Often', label: 'Often — 3–4 times a year' },
+  { value: 'Sometimes', label: 'Sometimes — Once every year' },
+  { value: 'Rarely', label: 'Rarely — Once every 2–3 years' },
+  { value: 'Never', label: 'Never' },
+]
+const PESTICIDE_TYPE_OPTIONS = ['Organic', 'Non-Organic']
+const PESTICIDE_FREQ_OPTIONS = [
+  { value: 'Often', label: 'Often — Every 4–6 weeks' },
+  { value: 'Sometimes', label: 'Sometimes — 1–2 times a year' },
+  { value: 'Rarely', label: 'Rarely — Once every few years' },
+  { value: 'Never', label: 'Never' },
+]
+const SHADE_TREE_OPTIONS = ['Yes', 'No']
+
 const STAGE_FIELDS = {
   'seed-sapling': [
     { name: 'datePlanted', label: 'Date Planted', type: 'date' },
     { name: 'numberOfPlants', label: 'Number of Plants', type: 'number' },
-    { name: 'variety', label: 'Variety', type: 'text' },
-    { name: 'fertilizerFrequency', label: 'Fertilizer Application Frequency', type: 'text' },
-    { name: 'fertilizerType', label: 'Fertilizer Type', type: 'text' },
-    { name: 'pesticideType', label: 'Pesticide Type', type: 'text' },
-    { name: 'pesticideFrequency', label: 'Pesticide Application Frequency', type: 'text' },
-    { name: 'monthlyTemperature', label: 'Monthly Temperature (°C)', type: 'number' },
-    { name: 'rainfall', label: 'Monthly Rainfall (mm)', type: 'number' },
-    { name: 'humidity', label: 'Monthly Humidity (%)', type: 'number' },
-    { name: 'soilPh', label: 'Soil pH', type: 'number', step: '0.1' },
+    { name: 'variety', label: 'Variety', type: 'select', options: VARIETY_OPTIONS },
+    { name: 'fertilizerType', label: 'Fertilizer Type', type: 'select', options: FERTILIZER_TYPE_OPTIONS },
+    { name: 'fertilizerFrequency', label: 'Application Frequency', type: 'select-labeled', options: FERTILIZER_FREQ_OPTIONS },
+    { name: 'pesticideType', label: 'Pesticide Type', type: 'select', options: PESTICIDE_TYPE_OPTIONS },
+    { name: 'pesticideFrequency', label: 'Application Frequency', type: 'select-labeled', options: PESTICIDE_FREQ_OPTIONS },
+    { name: 'monthlyTemperature', label: 'Average Monthly Temperature (°C)', type: 'number' },
+    { name: 'rainfall', label: 'Average Monthly Rainfall (mm)', type: 'number' },
+    { name: 'humidity', label: 'Average Monthly Humidity (%)', type: 'number' },
+    { name: 'soilPh', label: 'Soil pH (0–14)', type: 'number', step: '0.1', min: '0', max: '14' },
   ],
   'tree': [
     { name: 'datePlanted', label: 'Date Planted', type: 'date' },
     { name: 'numberOfPlants', label: 'Number of Plants', type: 'number' },
-    { name: 'variety', label: 'Variety', type: 'text' },
-    { name: 'fertilizerFrequency', label: 'Fertilizer Application Frequency', type: 'text' },
-    { name: 'fertilizerType', label: 'Fertilizer Type', type: 'text' },
-    { name: 'pesticideFrequency', label: 'Pesticide & Application Frequency', type: 'text' },
+    { name: 'variety', label: 'Variety', type: 'select', options: VARIETY_OPTIONS },
+    { name: 'fertilizerType', label: 'Fertilizer Type', type: 'select', options: FERTILIZER_TYPE_OPTIONS },
+    { name: 'fertilizerFrequency', label: 'Application Frequency', type: 'select-labeled', options: FERTILIZER_FREQ_OPTIONS },
+    { name: 'pesticideType', label: 'Pesticide Type', type: 'select', options: PESTICIDE_TYPE_OPTIONS },
+    { name: 'pesticideFrequency', label: 'Application Frequency', type: 'select-labeled', options: PESTICIDE_FREQ_OPTIONS },
     { name: 'lastHarvestedDate', label: 'Last Harvested Date', type: 'date' },
     { name: 'previousYield', label: 'Previous Coffee Yield (kg)', type: 'number' },
     { name: 'lastPrunedDate', label: 'Last Pruned Date', type: 'date' },
-    { name: 'shadeTrees', label: 'Presence of Shade Trees', type: 'select', options: ['Yes', 'No'] },
-    { name: 'monthlyTemperature', label: 'Monthly Temperature (°C)', type: 'number' },
-    { name: 'rainfall', label: 'Monthly Rainfall (mm)', type: 'number' },
-    { name: 'humidity', label: 'Monthly Humidity (%)', type: 'number' },
-    { name: 'soilPh', label: 'Soil pH', type: 'number', step: '0.1' },
+    { name: 'shadeTrees', label: 'Presence of Shade Trees', type: 'select', options: SHADE_TREE_OPTIONS },
+    { name: 'monthlyTemperature', label: 'Average Monthly Temperature (°C)', type: 'number' },
+    { name: 'rainfall', label: 'Average Monthly Rainfall (mm)', type: 'number' },
+    { name: 'humidity', label: 'Average Monthly Humidity (%)', type: 'number' },
+    { name: 'soilPh', label: 'Soil pH (0–14)', type: 'number', step: '0.1', min: '0', max: '14' },
   ],
   'flowering': [
     { name: 'datePlanted', label: 'Date Planted', type: 'date' },
     { name: 'numberOfPlants', label: 'Number of Plants', type: 'number' },
-    { name: 'variety', label: 'Variety', type: 'text' },
-    { name: 'fertilizerFrequency', label: 'Fertilizer Application Frequency', type: 'text' },
-    { name: 'fertilizerType', label: 'Fertilizer Type', type: 'text' },
-    { name: 'pesticideFrequency', label: 'Pesticide & Application Frequency', type: 'text' },
+    { name: 'variety', label: 'Variety', type: 'select', options: VARIETY_OPTIONS },
+    { name: 'fertilizerType', label: 'Fertilizer Type', type: 'select', options: FERTILIZER_TYPE_OPTIONS },
+    { name: 'fertilizerFrequency', label: 'Application Frequency', type: 'select-labeled', options: FERTILIZER_FREQ_OPTIONS },
+    { name: 'pesticideType', label: 'Pesticide Type', type: 'select', options: PESTICIDE_TYPE_OPTIONS },
+    { name: 'pesticideFrequency', label: 'Application Frequency', type: 'select-labeled', options: PESTICIDE_FREQ_OPTIONS },
     { name: 'lastHarvestedDate', label: 'Last Harvested Date', type: 'date' },
     { name: 'previousYield', label: 'Previous Coffee Yield (kg)', type: 'number' },
     { name: 'lastPrunedDate', label: 'Last Pruned Date', type: 'date' },
-    { name: 'shadeTrees', label: 'Presence of Shade Trees', type: 'select', options: ['Yes', 'No'] },
-    { name: 'monthlyTemperature', label: 'Monthly Temperature (°C)', type: 'number' },
-    { name: 'rainfall', label: 'Monthly Rainfall (mm)', type: 'number' },
-    { name: 'humidity', label: 'Monthly Humidity (%)', type: 'number' },
-    { name: 'soilPh', label: 'Soil pH', type: 'number', step: '0.1' },
+    { name: 'shadeTrees', label: 'Presence of Shade Trees', type: 'select', options: SHADE_TREE_OPTIONS },
+    { name: 'monthlyTemperature', label: 'Average Monthly Temperature (°C)', type: 'number' },
+    { name: 'rainfall', label: 'Average Monthly Rainfall (mm)', type: 'number' },
+    { name: 'humidity', label: 'Average Monthly Humidity (%)', type: 'number' },
+    { name: 'soilPh', label: 'Soil pH (0–14)', type: 'number', step: '0.1', min: '0', max: '14' },
     { name: 'estimatedFloweringDate', label: 'Estimated Flowering Date', type: 'date' },
   ],
   'ready-to-harvest': [
     { name: 'datePlanted', label: 'Date Planted', type: 'date' },
     { name: 'numberOfPlants', label: 'Number of Plants', type: 'number' },
-    { name: 'variety', label: 'Variety', type: 'text' },
-    { name: 'fertilizerFrequency', label: 'Fertilizer Application Frequency', type: 'text' },
-    { name: 'fertilizerType', label: 'Fertilizer Type', type: 'text' },
-    { name: 'pesticideType', label: 'Pesticide Type', type: 'text' },
-    { name: 'pesticideFrequency', label: 'Pesticide Application Frequency', type: 'text' },
+    { name: 'variety', label: 'Variety', type: 'select', options: VARIETY_OPTIONS },
+    { name: 'fertilizerType', label: 'Fertilizer Type', type: 'select', options: FERTILIZER_TYPE_OPTIONS },
+    { name: 'fertilizerFrequency', label: 'Application Frequency', type: 'select-labeled', options: FERTILIZER_FREQ_OPTIONS },
+    { name: 'pesticideType', label: 'Pesticide Type', type: 'select', options: PESTICIDE_TYPE_OPTIONS },
+    { name: 'pesticideFrequency', label: 'Application Frequency', type: 'select-labeled', options: PESTICIDE_FREQ_OPTIONS },
     { name: 'harvestDate', label: 'Harvest Date', type: 'date' },
     { name: 'previousYield', label: 'Previous Yield (kg)', type: 'number' },
     { name: 'predictedYield', label: 'Predicted Yield (kg)', type: 'number' },
     { name: 'harvestSeason', label: 'Date & Season of Harvest', type: 'text' },
-    { name: 'currentYield', label: 'Current Harvest (kg)', type: 'number' },
+    { name: 'currentYield', label: 'Current/Actual Yield (kg)', type: 'number' },
     { name: 'gradeFine', label: 'Grade: Fine (%)', type: 'number' },
     { name: 'gradePremium', label: 'Grade: Premium (%)', type: 'number' },
     { name: 'gradeCommercial', label: 'Grade: Commercial (%)', type: 'number' },
     { name: 'lastPrunedDate', label: 'Last Pruned Date', type: 'date' },
-    { name: 'monthlyTemperature', label: 'Monthly Temperature (°C)', type: 'number' },
-    { name: 'rainfall', label: 'Monthly Rainfall (mm)', type: 'number' },
-    { name: 'humidity', label: 'Monthly Humidity (%)', type: 'number' },
-    { name: 'soilPh', label: 'Soil pH', type: 'number', step: '0.1' },
-    { name: 'shadeTrees', label: 'Shade Trees', type: 'select', options: ['Yes', 'No'] },
+    { name: 'monthlyTemperature', label: 'Average Monthly Temperature (°C)', type: 'number' },
+    { name: 'rainfall', label: 'Average Monthly Rainfall (mm)', type: 'number' },
+    { name: 'humidity', label: 'Average Monthly Humidity (%)', type: 'number' },
+    { name: 'soilPh', label: 'Soil pH (0–14)', type: 'number', step: '0.1', min: '0', max: '14' },
+    { name: 'shadeTrees', label: 'Presence of Shade Trees', type: 'select', options: SHADE_TREE_OPTIONS },
     { name: 'estimatedHarvestDate', label: 'Estimated Harvest Date', type: 'date' },
     // Pre-Harvest fields
-    { name: 'preLastHarvestDate', label: 'Previous: Last Harvest Date', type: 'date' },
-    { name: 'preTotalTrees', label: 'Previous: Total Trees', type: 'number' },
-    { name: 'preYieldKg', label: 'Previous: Yielded Coffee (kg)', type: 'number' },
-    { name: 'preGradeFine', label: 'Previous: Fine Grade (kg)', type: 'number' },
-    { name: 'preGradePremium', label: 'Previous: Premium Grade (kg)', type: 'number' },
-    { name: 'preGradeCommercial', label: 'Previous: Commercial Grade (kg)', type: 'number' },
+    { name: 'preLastHarvestDate', label: 'Pre-Harvest: Last Harvest Date', type: 'date' },
+    { name: 'preTotalTrees', label: 'Pre-Harvest: Total Trees', type: 'number' },
+    { name: 'preYieldKg', label: 'Pre-Harvest: Yielded Coffee (kg)', type: 'number' },
+    { name: 'preGradeFine', label: 'Pre-Harvest: Fine Grade (kg)', type: 'number' },
+    { name: 'preGradePremium', label: 'Pre-Harvest: Premium Grade (kg)', type: 'number' },
+    { name: 'preGradeCommercial', label: 'Pre-Harvest: Commercial Grade (kg)', type: 'number' },
     // Post-Harvest fields
-    { name: 'postCurrentYield', label: 'Predicted: Yield (kg)', type: 'number' },
-    { name: 'postGradeFine', label: 'Predicted: Fine (%)', type: 'number' },
-    { name: 'postGradePremium', label: 'Predicted: Premium (%)', type: 'number' },
-    { name: 'postGradeCommercial', label: 'Predicted: Commercial (%)', type: 'number' },
+    { name: 'postCurrentYield', label: 'Post-Harvest: Current Yield (kg)', type: 'number' },
+    { name: 'postGradeFine', label: 'Post-Harvest: Fine (%)', type: 'number' },
+    { name: 'postGradePremium', label: 'Post-Harvest: Premium (%)', type: 'number' },
+    { name: 'postGradeCommercial', label: 'Post-Harvest: Commercial (%)', type: 'number' },
     { name: 'defectCount', label: 'Post-Harvest: Defect Count', type: 'number' },
     { name: 'beanMoisture', label: 'Post-Harvest: Bean Moisture Content (%)', type: 'number' },
     { name: 'beanScreenSize', label: 'Post-Harvest: Bean Screen Size', type: 'text' },
@@ -151,11 +170,20 @@ export default function ClusterDetailModal({ cluster, onClose }) {
             <option key={opt} value={opt}>{opt}</option>
           ))}
         </select>
+      ) : field.type === 'select-labeled' ? (
+        <select name={field.name} value={form[field.name]} onChange={handleChange}>
+          <option value="">Select...</option>
+          {field.options.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
       ) : (
         <input
           name={field.name}
           type={field.type}
           step={field.step}
+          min={field.min}
+          max={field.max}
           value={form[field.name]}
           onChange={handleChange}
           placeholder={field.label}

@@ -9,6 +9,7 @@ import {
   Coffee,
   Layers,
   Calendar,
+  Mountain,
 } from 'lucide-react'
 import {
   BarChart,
@@ -30,7 +31,7 @@ import './HarvestRecords.css'
 const GRADE_COLORS = ['#2d5a2d', '#7bc67b', '#fbbf24']
 
 export default function HarvestRecords() {
-  const { getAllClusters } = useFarm()
+  const { getAllClusters, farm } = useFarm()
   const [seasonFilter, setSeasonFilter] = useState('')
   const [selectedCluster, setSelectedCluster] = useState(null)
 
@@ -70,6 +71,28 @@ export default function HarvestRecords() {
     'ready-to-harvest': 'Ready to Harvest',
     'flowering': 'Flowering',
     'fruit-bearing': 'Fruit-bearing',
+  }
+
+  const getPlantAge = (datePlanted) => {
+    if (!datePlanted) return 'N/A'
+    const planted = new Date(datePlanted)
+    const now = new Date()
+    const years = Math.floor((now - planted) / (365.25 * 24 * 60 * 60 * 1000))
+    const months = Math.floor(((now - planted) % (365.25 * 24 * 60 * 60 * 1000)) / (30.44 * 24 * 60 * 60 * 1000))
+    if (years > 0) return `${years}y ${months}m`
+    return `${months}m`
+  }
+
+  // Build yield trend data across all harvest clusters for the line chart
+  const getYieldTrendData = () => {
+    return filteredClusters
+      .filter((c) => c.stageData?.currentYield || c.stageData?.previousYield)
+      .map((c) => ({
+        name: c.clusterName,
+        previous: parseFloat(c.stageData?.previousYield) || 0,
+        predicted: parseFloat(c.stageData?.predictedYield) || 0,
+        actual: parseFloat(c.stageData?.currentYield) || 0,
+      }))
   }
 
   return (
@@ -167,8 +190,12 @@ export default function HarvestRecords() {
                     <span className="info-value">{selectedCluster.stageData?.datePlanted || 'N/A'}</span>
                   </div>
                   <div className="info-item">
-                    <span className="info-label">Fertilizer</span>
-                    <span className="info-value">{selectedCluster.stageData?.fertilizerType || 'N/A'}</span>
+                    <span className="info-label">Plant Age</span>
+                    <span className="info-value">{getPlantAge(selectedCluster.stageData?.datePlanted)}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Elevation (MASL)</span>
+                    <span className="info-value">{farm?.elevation || 'N/A'}</span>
                   </div>
                   <div className="info-item">
                     <span className="info-label">Soil pH</span>
@@ -178,9 +205,55 @@ export default function HarvestRecords() {
                     <span className="info-label">Shade Trees</span>
                     <span className="info-value">{selectedCluster.stageData?.shadeTrees || 'N/A'}</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Dates & Seasons */}
+              <div className="detail-section">
+                <h4><Calendar size={16} /> Dates & Seasons</h4>
+                <div className="detail-info-grid">
                   <div className="info-item">
                     <span className="info-label">Season</span>
                     <span className="info-value">{selectedCluster.stageData?.harvestSeason || 'N/A'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Est. Flowering Date</span>
+                    <span className="info-value">{selectedCluster.stageData?.estimatedFloweringDate || 'N/A'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Est. Harvest Date</span>
+                    <span className="info-value">{selectedCluster.stageData?.estimatedHarvestDate || 'N/A'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Last Harvested</span>
+                    <span className="info-value">{selectedCluster.stageData?.lastHarvestedDate || 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Management Status */}
+              <div className="detail-section">
+                <h4><Coffee size={16} /> Management Status</h4>
+                <div className="detail-info-grid">
+                  <div className="info-item">
+                    <span className="info-label">Fertilizer Type</span>
+                    <span className="info-value">{selectedCluster.stageData?.fertilizerType || 'N/A'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Fertilizer Frequency</span>
+                    <span className="info-value">{selectedCluster.stageData?.fertilizerFrequency || 'N/A'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Pesticide Type</span>
+                    <span className="info-value">{selectedCluster.stageData?.pesticideType || 'N/A'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Pesticide Frequency</span>
+                    <span className="info-value">{selectedCluster.stageData?.pesticideFrequency || 'N/A'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Last Pruned</span>
+                    <span className="info-value">{selectedCluster.stageData?.lastPrunedDate || 'N/A'}</span>
                   </div>
                 </div>
               </div>
@@ -250,6 +323,27 @@ export default function HarvestRecords() {
                   </div>
                 </div>
               </div>
+
+              {/* Yield Trend Line Chart */}
+              {getYieldTrendData().length > 1 && (
+                <div className="detail-section">
+                  <h4><TrendingUp size={16} /> Yield Trends Across Clusters</h4>
+                  <div className="chart-card">
+                    <ResponsiveContainer width="100%" height={250}>
+                      <LineChart data={getYieldTrendData()}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={11} />
+                        <YAxis fontSize={12} />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="previous" stroke="#94a3b8" name="Previous" strokeWidth={2} />
+                        <Line type="monotone" dataKey="predicted" stroke="#fbbf24" name="Predicted" strokeWidth={2} />
+                        <Line type="monotone" dataKey="actual" stroke="#2d5a2d" name="Actual" strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

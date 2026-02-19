@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { User, Mail, Phone, MapPin, Save, LogOut } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Save, LogOut, Calendar } from 'lucide-react';
 import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog';
 import './Settings.css';
 
@@ -10,7 +10,9 @@ export default function Settings() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     firstName: user?.firstName || '',
+    middleInitial: user?.middleInitial || '',
     lastName: user?.lastName || '',
+    age: user?.age || '',
     email: user?.email || '',
     contactNumber: user?.contactNumber || '',
     municipality: user?.municipality || '',
@@ -53,9 +55,43 @@ export default function Settings() {
           <div className="profile-avatar">
             <User size={40} />
           </div>
-          <h3>{user?.firstName} {user?.lastName}</h3>
+          <h3>
+            {user?.firstName}
+            {user?.middleInitial ? ` ${user.middleInitial}.` : ''}{' '}
+            {user?.lastName}
+          </h3>
           <span className="profile-username">@{user?.username}</span>
           <span className="profile-role">Farm Manager</span>
+
+          <div className="profile-details">
+            {user?.age && (
+              <div className="profile-detail-item">
+                <Calendar size={13} />
+                <span className="detail-label">Age</span>
+                <span className="detail-value">{user.age}</span>
+              </div>
+            )}
+            <div className="profile-detail-item">
+              <Mail size={13} />
+              <span className="detail-label">Email</span>
+              <span className="detail-value">{user?.email || '—'}</span>
+            </div>
+            <div className="profile-detail-item">
+              <Phone size={13} />
+              <span className="detail-label">Contact</span>
+              <span className="detail-value">{user?.contactNumber || '—'}</span>
+            </div>
+            <div className="profile-detail-item">
+              <MapPin size={13} />
+              <span className="detail-label">Municipality</span>
+              <span className="detail-value">{user?.municipality || '—'}</span>
+            </div>
+            <div className="profile-detail-item">
+              <MapPin size={13} />
+              <span className="detail-label">Province</span>
+              <span className="detail-value">{user?.province || '—'}</span>
+            </div>
+          </div>
         </div>
 
         {/* Edit Profile Form */}
@@ -74,12 +110,36 @@ export default function Settings() {
             </div>
 
             <div className="settings-field">
+              <label><User size={14} /> Middle Initial</label>
+              <input
+                name="middleInitial"
+                value={form.middleInitial}
+                onChange={handleChange}
+                placeholder="M.I."
+                maxLength={2}
+              />
+            </div>
+
+            <div className="settings-field">
               <label><User size={14} /> Last Name</label>
               <input
                 name="lastName"
                 value={form.lastName}
                 onChange={handleChange}
                 placeholder="Last Name"
+              />
+            </div>
+
+            <div className="settings-field">
+              <label><Calendar size={14} /> Age</label>
+              <input
+                name="age"
+                type="number"
+                min="1"
+                max="150"
+                value={form.age}
+                onChange={handleChange}
+                placeholder="Age"
               />
             </div>
 

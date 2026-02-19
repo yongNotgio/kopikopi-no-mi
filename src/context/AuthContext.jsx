@@ -348,7 +348,9 @@ export function AuthProvider({ children }) {
         .from('users')
         .update({
           first_name: updates.firstName,
+          middle_initial: updates.middleInitial,
           last_name: updates.lastName,
+          age: updates.age ? Number(updates.age) : null,
           email: updates.email,
           contact_number: updates.contactNumber,
           municipality: updates.municipality,

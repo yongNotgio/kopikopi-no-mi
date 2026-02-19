@@ -71,7 +71,7 @@ export default function ClusterFormModal({ onClose, editData }) {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Area Size (hectares) *</label>
+              <label>Area Size (sqm) *</label>
               <input
                 name="areaSize"
                 type="number"
