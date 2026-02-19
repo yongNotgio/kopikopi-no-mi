@@ -53,10 +53,11 @@ export function FarmProvider({ children }) {
             (clusterRows || []).map((c) => ({
               id: c.id,
               clusterName: c.cluster_name,
-              areaSize: c.area_size,
+              areaSize: c.area_size_sqm,
               plantCount: c.plant_count,
               plantStage: c.plant_stage,
               createdAt: c.created_at,
+              variety: c.variety,
               stageData: c.cluster_stage_data?.[0]
                 ? mapStageDataFromDb(c.cluster_stage_data[0])
                 : null,
@@ -98,8 +99,7 @@ export function FarmProvider({ children }) {
       .update({
         farm_name: farmData.farmName,
         farm_area: farmData.farmArea || null,
-        elevation: farmData.elevation || null,
-        plant_variety: farmData.plantVariety || null,
+        elevation_m: farmData.elevation || null,
         overall_tree_count: farmData.overallTreeCount || null,
       })
       .eq('id', farm.id)
@@ -116,9 +116,10 @@ export function FarmProvider({ children }) {
       .insert({
         farm_id: farm.id,
         cluster_name: cluster.clusterName,
-        area_size: cluster.areaSize,
+        area_size_sqm: cluster.areaSize,
         plant_count: cluster.plantCount,
         plant_stage: cluster.plantStage,
+        variety: cluster.variety || null,
       })
       .select()
       .single()
@@ -131,9 +132,10 @@ export function FarmProvider({ children }) {
     const newCluster = {
       id: data.id,
       clusterName: data.cluster_name,
-      areaSize: data.area_size,
+      areaSize: data.area_size_sqm,
       plantCount: data.plant_count,
       plantStage: data.plant_stage,
+      variety: data.variety,
       createdAt: data.created_at,
       stageData: null,
       harvestRecords: [],
@@ -147,9 +149,10 @@ export function FarmProvider({ children }) {
     // Update basic cluster fields if present
     const basicFields = {}
     if (updates.clusterName !== undefined) basicFields.cluster_name = updates.clusterName
-    if (updates.areaSize !== undefined) basicFields.area_size = updates.areaSize
+    if (updates.areaSize !== undefined) basicFields.area_size_sqm = updates.areaSize
     if (updates.plantCount !== undefined) basicFields.plant_count = updates.plantCount
     if (updates.plantStage !== undefined) basicFields.plant_stage = updates.plantStage
+    if (updates.variety !== undefined) basicFields.variety = updates.variety
 
     if (Object.keys(basicFields).length > 0) {
       await supabase.from('clusters').update(basicFields).eq('id', clusterId)
@@ -162,7 +165,7 @@ export function FarmProvider({ children }) {
 
       await supabase
         .from('cluster_stage_data')
-        .upsert(dbStageData, { onConflict: 'cluster_id' })
+        .upsert(dbStageData, { onConflict: 'cluster_id,season' })
     }
 
     // Update local state
@@ -195,11 +198,14 @@ export function FarmProvider({ children }) {
       .insert({
         cluster_id: clusterId,
         season: record.season || null,
-        yield_kg: record.yieldKg || null,
-        grade_fine: record.gradeFine || null,
-        grade_premium: record.gradePremium || null,
-        grade_commercial: record.gradeCommercial || null,
-        notes: record.notes || null,
+        yield_kg: record.yieldKg != null ? [record.yieldKg] : null,
+        grade_fine: record.gradeFine != null ? [record.gradeFine] : null,
+        grade_premium: record.gradePremium != null ? [record.gradePremium] : null,
+        grade_commercial: record.gradeCommercial != null ? [record.gradeCommercial] : null,
+        fine_pct: record.finePct != null ? [record.finePct] : null,
+        premium_pct: record.premiumPct != null ? [record.premiumPct] : null,
+        commercial_pct: record.commercialPct != null ? [record.commercialPct] : null,
+        notes: record.notes ? [record.notes] : null,
       })
       .select()
       .single()
@@ -263,43 +269,40 @@ export function useFarm() {
 
 function mapStageDataFromDb(row) {
   return {
+    season: row.season || '',
     datePlanted: row.date_planted || '',
+    plantAgeMonths: row.plant_age_months ?? '',
     numberOfPlants: row.number_of_plants ?? '',
-    variety: row.variety || '',
-    fertilizerFrequency: row.fertilizer_frequency || '',
     fertilizerType: row.fertilizer_type || '',
+    fertilizerFrequency: row.fertilizer_frequency || '',
     pesticideType: row.pesticide_type || '',
     pesticideFrequency: row.pesticide_frequency || '',
-    monthlyTemperature: row.monthly_temperature ?? '',
-    rainfall: row.rainfall ?? '',
-    humidity: row.humidity ?? '',
-    soilPh: row.soil_ph ?? '',
-    lastHarvestedDate: row.last_harvested_date || '',
-    previousYield: row.previous_yield ?? '',
     lastPrunedDate: row.last_pruned_date || '',
-    shadeTrees: row.shade_trees || '',
+    previousPrunedDate: row.previous_pruned_date || '',
+    pruningIntervalMonths: row.pruning_interval_months ?? '',
+    shadeTreePresent: row.shade_tree_present ?? false,
+    shadeTreeSpecies: row.shade_tree_species || '',
+    soilPh: row.soil_ph ?? '',
+    avgTempC: row.avg_temp_c ?? '',
+    avgRainfallMm: row.avg_rainfall_mm ?? '',
+    avgHumidityPct: row.avg_humidity_pct ?? '',
+    actualFloweringDate: row.actual_flowering_date || '',
     estimatedFloweringDate: row.estimated_flowering_date || '',
-    harvestDate: row.harvest_date || '',
-    predictedYield: row.predicted_yield ?? '',
-    harvestSeason: row.harvest_season || '',
-    currentYield: row.current_yield ?? '',
-    gradeFine: row.grade_fine ?? '',
-    gradePremium: row.grade_premium ?? '',
-    gradeCommercial: row.grade_commercial ?? '',
     estimatedHarvestDate: row.estimated_harvest_date || '',
+    actualHarvestDate: row.actual_harvest_date || '',
     preLastHarvestDate: row.pre_last_harvest_date || '',
     preTotalTrees: row.pre_total_trees ?? '',
     preYieldKg: row.pre_yield_kg ?? '',
     preGradeFine: row.pre_grade_fine ?? '',
     preGradePremium: row.pre_grade_premium ?? '',
     preGradeCommercial: row.pre_grade_commercial ?? '',
-    postCurrentYield: row.post_current_yield ?? '',
-    postGradeFine: row.post_grade_fine ?? '',
-    postGradePremium: row.post_grade_premium ?? '',
-    postGradeCommercial: row.post_grade_commercial ?? '',
+    previousFinePct: row.previous_fine_pct ?? '',
+    previousPremiumPct: row.previous_premium_pct ?? '',
+    previousCommercialPct: row.previous_commercial_pct ?? '',
     defectCount: row.defect_count ?? '',
     beanMoisture: row.bean_moisture ?? '',
     beanScreenSize: row.bean_screen_size || '',
+    predictedYield: row.predicted_yield ?? '',
   }
 }
 
@@ -308,44 +311,42 @@ function mapStageDataToDb(sd) {
   const int = (v) => (v === '' || v === null || v === undefined ? null : parseInt(v))
   const str = (v) => (v === '' ? null : v || null)
   const dt = (v) => (v === '' ? null : v || null)
+  const bool = (v) => (v === true || v === 'true' || v === 'Yes' || v === 'yes' ? true : false)
 
   return {
+    season: str(sd.season),
     date_planted: dt(sd.datePlanted),
+    plant_age_months: int(sd.plantAgeMonths),
     number_of_plants: int(sd.numberOfPlants),
-    variety: str(sd.variety),
-    fertilizer_frequency: str(sd.fertilizerFrequency),
     fertilizer_type: str(sd.fertilizerType),
+    fertilizer_frequency: str(sd.fertilizerFrequency),
     pesticide_type: str(sd.pesticideType),
     pesticide_frequency: str(sd.pesticideFrequency),
-    monthly_temperature: num(sd.monthlyTemperature),
-    rainfall: num(sd.rainfall),
-    humidity: num(sd.humidity),
-    soil_ph: num(sd.soilPh),
-    last_harvested_date: dt(sd.lastHarvestedDate),
-    previous_yield: num(sd.previousYield),
     last_pruned_date: dt(sd.lastPrunedDate),
-    shade_trees: str(sd.shadeTrees),
+    previous_pruned_date: dt(sd.previousPrunedDate),
+    pruning_interval_months: int(sd.pruningIntervalMonths),
+    shade_tree_present: bool(sd.shadeTreePresent),
+    shade_tree_species: str(sd.shadeTreeSpecies),
+    soil_ph: num(sd.soilPh),
+    avg_temp_c: num(sd.avgTempC),
+    avg_rainfall_mm: num(sd.avgRainfallMm),
+    avg_humidity_pct: num(sd.avgHumidityPct),
+    actual_flowering_date: dt(sd.actualFloweringDate),
     estimated_flowering_date: dt(sd.estimatedFloweringDate),
-    harvest_date: dt(sd.harvestDate),
-    predicted_yield: num(sd.predictedYield),
-    harvest_season: str(sd.harvestSeason),
-    current_yield: num(sd.currentYield),
-    grade_fine: num(sd.gradeFine),
-    grade_premium: num(sd.gradePremium),
-    grade_commercial: num(sd.gradeCommercial),
     estimated_harvest_date: dt(sd.estimatedHarvestDate),
+    actual_harvest_date: dt(sd.actualHarvestDate),
     pre_last_harvest_date: dt(sd.preLastHarvestDate),
     pre_total_trees: int(sd.preTotalTrees),
     pre_yield_kg: num(sd.preYieldKg),
     pre_grade_fine: num(sd.preGradeFine),
     pre_grade_premium: num(sd.preGradePremium),
     pre_grade_commercial: num(sd.preGradeCommercial),
-    post_current_yield: num(sd.postCurrentYield),
-    post_grade_fine: num(sd.postGradeFine),
-    post_grade_premium: num(sd.postGradePremium),
-    post_grade_commercial: num(sd.postGradeCommercial),
+    previous_fine_pct: num(sd.previousFinePct),
+    previous_premium_pct: num(sd.previousPremiumPct),
+    previous_commercial_pct: num(sd.previousCommercialPct),
     defect_count: int(sd.defectCount),
     bean_moisture: num(sd.beanMoisture),
     bean_screen_size: str(sd.beanScreenSize),
+    predicted_yield: num(sd.predictedYield),
   }
 }

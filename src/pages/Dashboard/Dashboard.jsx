@@ -97,11 +97,7 @@ export default function Dashboard() {
             </div>
             <div className="farm-info-item">
               <Mountain size={14} />
-              <span>{farm.elevation || '—'} MASL</span>
-            </div>
-            <div className="farm-info-item">
-              <Coffee size={14} />
-              <span>{farm.plant_variety || '—'}</span>
+              <span>{farm.elevation_m || '—'} MASL</span>
             </div>
             <div className="farm-info-item">
               <TreePine size={14} />
@@ -283,8 +279,7 @@ export default function Dashboard() {
             id: farm.id,
             farmName: farm.farm_name || '',
             farmArea: farm.farm_area || '',
-            elevation: farm.elevation || '',
-            plantVariety: farm.plant_variety || '',
+            elevation: farm.elevation_m || '',
             overallTreeCount: farm.overall_tree_count || '',
           } : null}
         />

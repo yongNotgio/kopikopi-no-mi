@@ -12,7 +12,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
     ResponsiveContainer, LineChart, Line,
 } from 'recharts'
-import { fetchAdminAnalytics, exportToCSV, GRADE_COLORS } from '../../lib/analyticsService'
+import { fetchAdminAnalytics, exportToCSV, GRADE_COLORS, arrLastFloat } from '../../lib/analyticsService'
 import './Prediction.css'
 
 export default function Prediction() {
@@ -62,7 +62,7 @@ export default function Prediction() {
                 const previous = parseFloat(sd.pre_yield_kg || 0)
                 
                 // Get actual from latest harvest
-                const actual = c.latestHarvest ? parseFloat(c.latestHarvest.yield_kg || 0) : 0
+                const actual = c.latestHarvest ? arrLastFloat(c.latestHarvest.yield_kg) : 0
 
                 farmMap[farmId].clusters.push({
                     id: c.id,

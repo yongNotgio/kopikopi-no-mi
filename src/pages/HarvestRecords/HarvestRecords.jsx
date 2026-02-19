@@ -29,7 +29,7 @@ import {
   Pie,
   Cell,
 } from 'recharts'
-import { fetchFarmerAnalytics, exportToCSV, GRADE_COLORS } from '../../lib/analyticsService'
+import { fetchFarmerAnalytics, exportToCSV, GRADE_COLORS, arrLastFloat } from '../../lib/analyticsService'
 import './HarvestRecords.css'
 
 export default function HarvestRecords() {
@@ -55,7 +55,7 @@ export default function HarvestRecords() {
       // Process clusters with harvest data
       const processedClusters = data.clusters?.map(c => {
         const sd = c.stageData || {}
-        const harvests = c.harvests || []
+        const harvests = c.allHarvests || []
         const latestHarvest = harvests[0]
         
         return {
@@ -65,28 +65,31 @@ export default function HarvestRecords() {
           plantCount: c.plant_count,
           variety: c.variety,
           stageData: {
-            variety: c.variety || sd.variety,
-            datePlanted: c.date_planted,
+            season: sd.season,
+            variety: c.variety,
+            datePlanted: sd.date_planted,
             harvestSeason: sd.season || latestHarvest?.season || 'N/A',
             predictedYield: sd.predicted_yield || 0,
-            currentYield: latestHarvest?.yield_kg || 0,
+            currentYield: arrLastFloat(latestHarvest?.yield_kg),
             previousYield: sd.pre_yield_kg || 0,
-            gradeFine: latestHarvest?.grade_fine_kg || 0,
-            gradePremium: latestHarvest?.grade_premium_kg || 0,
-            gradeCommercial: latestHarvest?.grade_commercial_kg || 0,
+            gradeFine: arrLastFloat(latestHarvest?.grade_fine),
+            gradePremium: arrLastFloat(latestHarvest?.grade_premium),
+            gradeCommercial: arrLastFloat(latestHarvest?.grade_commercial),
             fertilizerType: sd.fertilizer_type,
             fertilizerFrequency: sd.fertilizer_frequency,
             pesticideType: sd.pesticide_type,
             pesticideFrequency: sd.pesticide_frequency,
             soilPh: sd.soil_ph,
-            shadeTrees: sd.shade_trees ? 'Yes' : 'No',
-            lastHarvestedDate: latestHarvest?.harvest_date,
+            shadeTreePresent: sd.shade_tree_present,
+            shadeTreeSpecies: sd.shade_tree_species,
+            actualHarvestDate: sd.actual_harvest_date || latestHarvest?.actual_harvest_date,
             estimatedHarvestDate: sd.estimated_harvest_date,
             estimatedFloweringDate: sd.estimated_flowering_date,
+            actualFloweringDate: sd.actual_flowering_date,
             lastPrunedDate: sd.last_pruned_date,
-            temperature: sd.temperature,
-            rainfall: sd.rainfall,
-            humidity: sd.humidity,
+            avgTempC: sd.avg_temp_c,
+            avgRainfallMm: sd.avg_rainfall_mm,
+            avgHumidityPct: sd.avg_humidity_pct,
           },
           harvests,
         }
@@ -128,6 +131,26 @@ export default function HarvestRecords() {
         c.harvests?.some(h => h.season === seasonFilter)
       )
     : harvestClusters.length > 0 ? harvestClusters : allClusters
+
+  // Build monthly trend data from array columns for the selected cluster
+  const getMonthlyTrendData = (cluster) => {
+    if (!cluster?.harvests?.length) return []
+    // Use the latest harvest record's arrays
+    const latest = cluster.harvests.sort((a, b) =>
+      new Date(b.actual_harvest_date) - new Date(a.actual_harvest_date)
+    )[0]
+    if (!latest || !Array.isArray(latest.yield_kg)) return []
+
+    // Build monthly data points (exclude last element = season total)
+    const months = latest.yield_kg.length > 1 ? latest.yield_kg.length - 1 : latest.yield_kg.length
+    return Array.from({ length: months }, (_, i) => ({
+      month: `Pick ${i + 1}`,
+      yield: parseFloat(latest.yield_kg[i]) || 0,
+      fine: parseFloat(latest.grade_fine?.[i]) || 0,
+      premium: parseFloat(latest.grade_premium?.[i]) || 0,
+      commercial: parseFloat(latest.grade_commercial?.[i]) || 0,
+    }))
+  }
 
   // Generate chart data from selected cluster
   const getYieldChartData = (cluster) => {
@@ -190,10 +213,10 @@ export default function HarvestRecords() {
       if (!seasonMap[season]) {
         seasonMap[season] = { season, yield: 0, fine: 0, premium: 0, commercial: 0 }
       }
-      seasonMap[season].yield += parseFloat(h.yield_kg || 0)
-      seasonMap[season].fine += parseFloat(h.grade_fine_kg || 0)
-      seasonMap[season].premium += parseFloat(h.grade_premium_kg || 0)
-      seasonMap[season].commercial += parseFloat(h.grade_commercial_kg || 0)
+      seasonMap[season].yield += arrLastFloat(h.yield_kg)
+      seasonMap[season].fine += arrLastFloat(h.grade_fine)
+      seasonMap[season].premium += arrLastFloat(h.grade_premium)
+      seasonMap[season].commercial += arrLastFloat(h.grade_commercial)
     })
     return Object.values(seasonMap).map(s => ({
       ...s,
@@ -312,7 +335,7 @@ export default function HarvestRecords() {
                     </span>
                   </div>
                   <div className="cli-details">
-                    <span><Coffee size={12} /> {cluster.stageData?.variety || 'N/A'}</span>
+                    <span><Coffee size={12} /> {cluster.variety || 'N/A'}</span>
                     <span><Layers size={12} /> {cluster.plantCount} trees</span>
                     <span><Calendar size={12} /> {cluster.stageData?.harvestSeason || 'N/A'}</span>
                   </div>
@@ -458,7 +481,7 @@ export default function HarvestRecords() {
                 <div className="detail-info-grid-compact">
                   <div className="info-item-compact">
                     <span className="info-label">Variety</span>
-                    <span className="info-value">{selectedCluster.stageData?.variety || 'N/A'}</span>
+                    <span className="info-value">{selectedCluster.variety || 'N/A'}</span>
                   </div>
                   <div className="info-item-compact">
                     <span className="info-label">Date Planted</span>
@@ -474,7 +497,7 @@ export default function HarvestRecords() {
                   </div>
                   <div className="info-item-compact">
                     <span className="info-label">Shade Trees</span>
-                    <span className="info-value">{selectedCluster.stageData?.shadeTrees || 'N/A'}</span>
+                    <span className="info-value">{selectedCluster.stageData?.shadeTreePresent ? 'Yes' : 'No'}</span>
                   </div>
                   <div className="info-item-compact">
                     <span className="info-label">Season</span>
@@ -540,7 +563,7 @@ export default function HarvestRecords() {
               </div>
 
               {/* Agro-climatic Data */}
-              {(selectedCluster.stageData?.temperature || selectedCluster.stageData?.rainfall || selectedCluster.stageData?.humidity) && (
+              {(selectedCluster.stageData?.avgTempC || selectedCluster.stageData?.avgRainfallMm || selectedCluster.stageData?.avgHumidityPct) && (
                 <div className="detail-section">
                   <h4><Mountain size={16} /> Agro-climatic Conditions</h4>
                   <div className="climate-grid">
@@ -548,21 +571,21 @@ export default function HarvestRecords() {
                       <span className="climate-icon">🌡️</span>
                       <div>
                         <span className="climate-label">Temperature</span>
-                        <span className="climate-value">{selectedCluster.stageData?.temperature || 'N/A'}°C</span>
+                        <span className="climate-value">{selectedCluster.stageData?.avgTempC || 'N/A'}°C</span>
                       </div>
                     </div>
                     <div className="climate-card">
                       <span className="climate-icon">🌧️</span>
                       <div>
                         <span className="climate-label">Rainfall</span>
-                        <span className="climate-value">{selectedCluster.stageData?.rainfall || 'N/A'} mm</span>
+                        <span className="climate-value">{selectedCluster.stageData?.avgRainfallMm || 'N/A'} mm</span>
                       </div>
                     </div>
                     <div className="climate-card">
                       <span className="climate-icon">💧</span>
                       <div>
                         <span className="climate-label">Humidity</span>
-                        <span className="climate-value">{selectedCluster.stageData?.humidity || 'N/A'}%</span>
+                        <span className="climate-value">{selectedCluster.stageData?.avgHumidityPct || 'N/A'}%</span>
                       </div>
                     </div>
                   </div>
@@ -613,6 +636,42 @@ export default function HarvestRecords() {
                   </div>
                 </div>
               </div>
+
+              {/* Monthly Harvest Trend (from array data) */}
+              {getMonthlyTrendData(selectedCluster).length > 1 && (
+                <div className="detail-section">
+                  <h4><TrendingUp size={16} /> Monthly Harvest Progression</h4>
+                  <div className="charts-grid">
+                    <div className="chart-card">
+                      <h5>Yield per Pick (kg)</h5>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <LineChart data={getMonthlyTrendData(selectedCluster)}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="month" fontSize={11} />
+                          <YAxis fontSize={11} tickFormatter={v => `${v} kg`} />
+                          <Tooltip formatter={v => [`${Number(v).toFixed(1)} kg`]} />
+                          <Line type="monotone" dataKey="yield" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} name="Yield" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="chart-card">
+                      <h5>Grade Breakdown per Pick (kg)</h5>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <BarChart data={getMonthlyTrendData(selectedCluster)}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="month" fontSize={11} />
+                          <YAxis fontSize={11} />
+                          <Tooltip formatter={v => [`${Number(v).toFixed(1)} kg`]} />
+                          <Legend />
+                          <Bar dataKey="fine" stackId="g" fill={GRADE_COLORS[0]} name="Fine" />
+                          <Bar dataKey="premium" stackId="g" fill={GRADE_COLORS[1]} name="Premium" />
+                          <Bar dataKey="commercial" stackId="g" fill={GRADE_COLORS[2]} name="Commercial" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Yield Trend Line Chart */}
               {getYieldTrendData().length > 1 && (

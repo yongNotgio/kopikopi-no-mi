@@ -1,5 +1,21 @@
 import { supabase } from './supabase'
 
+// ── Array helpers ────────────────────────────────────────────────
+// harvest_records columns (yield_kg, grade_fine, etc.) are now numeric[]/text[].
+// The LAST element of each array is the season total; earlier elements are monthly picks.
+// arrLast() safely extracts the season-total value for backward-compatible reads.
+export function arrLast(arr) {
+  if (Array.isArray(arr) && arr.length > 0) return arr[arr.length - 1]
+  // Scalar fallback (data not yet migrated or already a number)
+  if (arr !== null && arr !== undefined && !Array.isArray(arr)) return arr
+  return null
+}
+
+// Parse the last element of an array column as a float, defaulting to 0
+export function arrLastFloat(arr) {
+  return parseFloat(arrLast(arr)) || 0
+}
+
 // Constants for Robusta ideal ranges
 export const ROBUSTA_IDEALS = {
   elevation_m: { min: 600, max: 1200 },
@@ -130,8 +146,10 @@ export async function fetchAdminAnalytics() {
       const farm = Array.isArray(cluster.farms) ? cluster.farms[0] : cluster.farms
       const farmer = farm?.users ? (Array.isArray(farm.users) ? farm.users[0] : farm.users) : null
 
+      const latestYield = arrLastFloat(latestHarvest.yield_kg)
+
       const risk = getRiskLevel(
-        parseFloat(latestHarvest.yield_kg) || 0,
+        latestYield,
         parseFloat(latestStage.pre_yield_kg) || 0
       )
 
@@ -146,7 +164,7 @@ export async function fetchAdminAnalytics() {
         riskLevel: risk.level,
         priority: risk.priority,
         yieldDecline: latestStage.pre_yield_kg > 0
-          ? (((latestStage.pre_yield_kg - (latestHarvest.yield_kg || 0)) / latestStage.pre_yield_kg) * 100).toFixed(1)
+          ? (((latestStage.pre_yield_kg - latestYield) / latestStage.pre_yield_kg) * 100).toFixed(1)
           : 0,
       }
     })
@@ -169,10 +187,10 @@ export async function fetchAdminAnalytics() {
     processedClusters.forEach(cluster => {
       const harvests = cluster.allHarvests || []
       harvests.forEach(h => {
-        totalYield += parseFloat(h.yield_kg) || 0
-        gradeFine += parseFloat(h.grade_fine) || 0
-        gradePremium += parseFloat(h.grade_premium) || 0
-        gradeCommercial += parseFloat(h.grade_commercial) || 0
+        totalYield += arrLastFloat(h.yield_kg)
+        gradeFine += arrLastFloat(h.grade_fine)
+        gradePremium += arrLastFloat(h.grade_premium)
+        gradeCommercial += arrLastFloat(h.grade_commercial)
       })
 
       const stageData = cluster.allStageData || []
@@ -196,10 +214,10 @@ export async function fetchAdminAnalytics() {
       if (!seasonMap[season]) {
         seasonMap[season] = { actual: 0, fine: 0, premium: 0, commercial: 0, count: 0 }
       }
-      seasonMap[season].actual += parseFloat(h.yield_kg) || 0
-      seasonMap[season].fine += parseFloat(h.grade_fine) || 0
-      seasonMap[season].premium += parseFloat(h.grade_premium) || 0
-      seasonMap[season].commercial += parseFloat(h.grade_commercial) || 0
+      seasonMap[season].actual += arrLastFloat(h.yield_kg)
+      seasonMap[season].fine += arrLastFloat(h.grade_fine)
+      seasonMap[season].premium += arrLastFloat(h.grade_premium)
+      seasonMap[season].commercial += arrLastFloat(h.grade_commercial)
       seasonMap[season].count++
     })
 
@@ -289,8 +307,10 @@ export async function fetchFarmerAnalytics(userId) {
         new Date(b.actual_harvest_date) - new Date(a.actual_harvest_date)
       )[0] || {}
 
+      const latestYield = arrLastFloat(latestHarvest.yield_kg)
+
       const risk = getRiskLevel(
-        parseFloat(latestHarvest.yield_kg) || 0,
+        latestYield,
         parseFloat(latestStage.pre_yield_kg) || 0
       )
 
@@ -303,11 +323,11 @@ export async function fetchFarmerAnalytics(userId) {
         riskLevel: risk.level,
         priority: risk.priority,
         yieldStatus: getYieldStatus(
-          parseFloat(latestHarvest.yield_kg) || 0,
+          latestYield,
           parseFloat(latestStage.pre_yield_kg) || 0
         ),
         yieldDecline: latestStage.pre_yield_kg > 0
-          ? (((latestStage.pre_yield_kg - (latestHarvest.yield_kg || 0)) / latestStage.pre_yield_kg) * 100).toFixed(1)
+          ? (((latestStage.pre_yield_kg - latestYield) / latestStage.pre_yield_kg) * 100).toFixed(1)
           : 0,
       }
     })
@@ -323,10 +343,10 @@ export async function fetchFarmerAnalytics(userId) {
     processedClusters.forEach(cluster => {
       const harvests = cluster.allHarvests || []
       harvests.forEach(h => {
-        totalYield += parseFloat(h.yield_kg) || 0
-        gradeFine += parseFloat(h.grade_fine) || 0
-        gradePremium += parseFloat(h.grade_premium) || 0
-        gradeCommercial += parseFloat(h.grade_commercial) || 0
+        totalYield += arrLastFloat(h.yield_kg)
+        gradeFine += arrLastFloat(h.grade_fine)
+        gradePremium += arrLastFloat(h.grade_premium)
+        gradeCommercial += arrLastFloat(h.grade_commercial)
       })
 
       const stageData = cluster.allStageData || []
@@ -354,10 +374,10 @@ export async function fetchFarmerAnalytics(userId) {
       if (!seasonMap[season]) {
         seasonMap[season] = { actual: 0, fine: 0, premium: 0, commercial: 0, count: 0, predicted: 0 }
       }
-      seasonMap[season].actual += parseFloat(h.yield_kg) || 0
-      seasonMap[season].fine += parseFloat(h.grade_fine) || 0
-      seasonMap[season].premium += parseFloat(h.grade_premium) || 0
-      seasonMap[season].commercial += parseFloat(h.grade_commercial) || 0
+      seasonMap[season].actual += arrLastFloat(h.yield_kg)
+      seasonMap[season].fine += arrLastFloat(h.grade_fine)
+      seasonMap[season].premium += arrLastFloat(h.grade_premium)
+      seasonMap[season].commercial += arrLastFloat(h.grade_commercial)
       seasonMap[season].count++
     })
 

@@ -20,7 +20,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { fetchFarmerAnalytics, generateRecommendations, exportToCSV, ROBUSTA_IDEALS } from '../../lib/analyticsService'
+import { fetchFarmerAnalytics, generateRecommendations, exportToCSV, ROBUSTA_IDEALS, arrLastFloat } from '../../lib/analyticsService'
 import './Recommendations.css'
 
 // Priority colors matching Streamlit
@@ -83,8 +83,8 @@ function analyzeCluster(cluster) {
   }
 
   // Check shade trees
-  const shadeTrees = sd.shadeTrees || sd.shade_trees
-  if (shadeTrees === 'No' || shadeTrees === false) {
+  const shadeTrees = sd.shadeTreePresent || sd.shade_tree_present
+  if (shadeTrees === 'No' || shadeTrees === false || !shadeTrees) {
     issues.push({
       factor: 'shade_tree_present',
       severity: 'low',
@@ -96,7 +96,7 @@ function analyzeCluster(cluster) {
   }
 
   // Check temperature
-  const temp = parseFloat(sd.monthlyTemperature || sd.temperature || sd.avg_temp_c)
+  const temp = parseFloat(sd.avgTempC || sd.avg_temp_c)
   if (temp && (temp < ROBUSTA_IDEALS.avg_temp_c.min || temp > ROBUSTA_IDEALS.avg_temp_c.max)) {
     issues.push({
       factor: 'avg_temp_c',
@@ -111,7 +111,7 @@ function analyzeCluster(cluster) {
   }
 
   // Check humidity
-  const humidity = parseFloat(sd.humidity || sd.avg_humidity_pct)
+  const humidity = parseFloat(sd.avgHumidityPct || sd.avg_humidity_pct)
   if (humidity && (humidity < ROBUSTA_IDEALS.avg_humidity_pct.min || humidity > ROBUSTA_IDEALS.avg_humidity_pct.max)) {
     issues.push({
       factor: 'avg_humidity_pct',
@@ -126,7 +126,7 @@ function analyzeCluster(cluster) {
   }
 
   // Check rainfall
-  const rainfall = parseFloat(sd.rainfall || sd.avg_rainfall_mm)
+  const rainfall = parseFloat(sd.avgRainfallMm || sd.avg_rainfall_mm)
   if (rainfall && (rainfall < ROBUSTA_IDEALS.avg_rainfall_mm.min || rainfall > ROBUSTA_IDEALS.avg_rainfall_mm.max)) {
     issues.push({
       factor: 'avg_rainfall_mm',
@@ -141,8 +141,8 @@ function analyzeCluster(cluster) {
   }
 
   // Check yield decline
-  const prevYield = parseFloat(sd.previousYield || sd.pre_yield_kg)
-  const currentYield = parseFloat(sd.currentYield || sd.actual_yield)
+  const prevYield = parseFloat(sd.preYieldKg || sd.pre_yield_kg)
+  const currentYield = parseFloat(sd.actualYield || sd.actual_yield)
   if (prevYield && currentYield && currentYield < prevYield * 0.8) {
     issues.push({
       factor: 'yield_decline',
@@ -198,21 +198,21 @@ export default function Recommendations() {
           plantCount: c.plant_count,
           variety: c.variety,
           stageData: {
-            variety: c.variety || sd.variety,
+            variety: c.variety,
             datePlanted: c.date_planted,
             harvestSeason: sd.season,
             predictedYield: sd.predicted_yield,
-            currentYield: c.latestHarvest?.yield_kg || 0,
+            currentYield: arrLastFloat(c.latestHarvest?.yield_kg),
             previousYield: sd.pre_yield_kg,
-            temperature: sd.temperature || sd.avg_temp_c,
-            humidity: sd.humidity || sd.avg_humidity_pct,
-            rainfall: sd.rainfall || sd.avg_rainfall_mm,
+            avgTempC: sd.avgTempC || sd.avg_temp_c,
+            avgHumidityPct: sd.avgHumidityPct || sd.avg_humidity_pct,
+            avgRainfallMm: sd.avgRainfallMm || sd.avg_rainfall_mm,
             soil_ph: sd.soil_ph,
             fertilizer_type: sd.fertilizer_type,
             fertilizer_frequency: sd.fertilizer_frequency,
             pesticide_type: sd.pesticide_type,
             pesticide_frequency: sd.pesticide_frequency,
-            shade_trees: sd.shade_trees || sd.shade_tree_present,
+            shadeTreePresent: sd.shadeTreePresent || sd.shade_tree_present,
             last_pruned_date: sd.last_pruned_date,
             elevation_m: sd.elevation_m || data.farm?.elevation_m,
             pruning_interval_months: sd.pruning_interval_months,

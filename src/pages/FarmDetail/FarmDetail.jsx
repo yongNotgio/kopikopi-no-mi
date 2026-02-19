@@ -58,7 +58,7 @@ export default function FarmDetail() {
         <div className="fd-title">
           <h1>{farm.farmName}</h1>
           <p>
-            {farm.farmArea} ha · {farm.elevation}m elevation · {farm.plantVariety} · {farm.overallTreeCount} trees
+            {farm.farmArea} ha · {farm.elevation_m}m elevation · {farm.overallTreeCount} trees
           </p>
         </div>
         <button className="btn-primary" onClick={() => setShowClusterForm(true)}>

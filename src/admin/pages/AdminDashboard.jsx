@@ -28,6 +28,7 @@ import {
     GRADE_COLORS,
     generateRecommendations,
     exportToCSV,
+    arrLastFloat,
 } from '../../lib/analyticsService'
 import './AdminDashboard.css'
 
@@ -129,7 +130,7 @@ export default function AdminDashboard() {
                         avgRainfall: c.stageData?.avg_rainfall_mm || 'N/A',
                         avgHumidity: c.stageData?.avg_humidity_pct || 'N/A',
                         predictedYield: parseFloat(c.stageData?.predicted_yield) || 0,
-                        actualYield: parseFloat(c.latestHarvest?.yield_kg) || 0,
+                        actualYield: arrLastFloat(c.latestHarvest?.yield_kg),
                         previousYield: parseFloat(c.stageData?.pre_yield_kg) || 0,
                         plantStage: c.plant_stage,
                         plantCount: c.plant_count,
@@ -680,7 +681,7 @@ export default function AdminDashboard() {
                                     <ResponsiveContainer width="100%" height={200}>
                                         <BarChart data={selectedCluster.harvestRecords.map(h => ({
                                             season: h.season,
-                                            yield: parseFloat(h.yield_kg) || 0,
+                                            yield: arrLastFloat(h.yield_kg),
                                         }))}>
                                             <CartesianGrid strokeDasharray="3 3" />
                                             <XAxis dataKey="season" fontSize={11} />
@@ -689,6 +690,49 @@ export default function AdminDashboard() {
                                             <Bar dataKey="yield" fill="#4A7C59" />
                                         </BarChart>
                                     </ResponsiveContainer>
+
+                                    {/* Monthly Harvest Progression */}
+                                    {(() => {
+                                        const latest = [...selectedCluster.harvestRecords].sort((a, b) =>
+                                            new Date(b.actual_harvest_date) - new Date(a.actual_harvest_date)
+                                        )[0]
+                                        if (!latest || !Array.isArray(latest.yield_kg) || latest.yield_kg.length <= 1) return null
+                                        const months = latest.yield_kg.length - 1
+                                        const monthlyData = Array.from({ length: months }, (_, i) => ({
+                                            month: `Pick ${i + 1}`,
+                                            yield: parseFloat(latest.yield_kg[i]) || 0,
+                                            fine: parseFloat(latest.grade_fine?.[i]) || 0,
+                                            premium: parseFloat(latest.grade_premium?.[i]) || 0,
+                                            commercial: parseFloat(latest.grade_commercial?.[i]) || 0,
+                                        }))
+                                        return (
+                                            <>
+                                                <h3 className="admin-detail-section-title">Monthly Harvest Progression</h3>
+                                                <ResponsiveContainer width="100%" height={200}>
+                                                    <LineChart data={monthlyData}>
+                                                        <CartesianGrid strokeDasharray="3 3" />
+                                                        <XAxis dataKey="month" fontSize={11} />
+                                                        <YAxis fontSize={11} tickFormatter={(v) => `${v} kg`} />
+                                                        <Tooltip formatter={(v) => [`${Number(v).toFixed(1)} kg`]} />
+                                                        <Legend />
+                                                        <Line type="monotone" dataKey="yield" stroke="#3b82f6" strokeWidth={2} name="Yield" />
+                                                    </LineChart>
+                                                </ResponsiveContainer>
+                                                <ResponsiveContainer width="100%" height={200}>
+                                                    <BarChart data={monthlyData}>
+                                                        <CartesianGrid strokeDasharray="3 3" />
+                                                        <XAxis dataKey="month" fontSize={11} />
+                                                        <YAxis fontSize={11} />
+                                                        <Tooltip formatter={(v) => [`${Number(v).toFixed(1)} kg`]} />
+                                                        <Legend />
+                                                        <Bar dataKey="fine" stackId="g" fill={GRADE_COLORS[0]} name="Fine" />
+                                                        <Bar dataKey="premium" stackId="g" fill={GRADE_COLORS[1]} name="Premium" />
+                                                        <Bar dataKey="commercial" stackId="g" fill={GRADE_COLORS[2]} name="Commercial" />
+                                                    </BarChart>
+                                                </ResponsiveContainer>
+                                            </>
+                                        )
+                                    })()}
                                 </>
                             )}
                         </div>

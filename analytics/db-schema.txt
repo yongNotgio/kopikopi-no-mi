@@ -87,7 +87,7 @@ Entity: harvest_records
   - grade_premium numeric
   - grade_commercial numeric
   - fine_pct numeric GENERATED ALWAYS AS (grade_fine / NULLIF(yield_kg, 0) * 100) STORED
-  - premium_pct numeric GENERATED ALWAYS AS (grade_premium / NULLIF(yield_kg, 0) * 100) STORED
+  - preamium_pct numeric GENERATED ALWAYS AS (grade_premium / NULLIF(yield_kg, 0) * 100) STORED
   - commercial_pct numeric GENERATED ALWAYS AS (grade_commercial / NULLIF(yield_kg, 0) * 100) STORED
   - notes text
   - recorded_at timestamptz NOT NULL DEFAULT now()

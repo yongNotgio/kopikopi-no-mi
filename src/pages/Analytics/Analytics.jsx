@@ -18,7 +18,7 @@ import {
     BarChart, Bar, PieChart as RechartPie, Pie, Cell,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { fetchFarmerAnalytics, exportToCSV, GRADE_COLORS, STATUS_COLORS, getYieldStatus } from '../../lib/analyticsService'
+import { fetchFarmerAnalytics, exportToCSV, GRADE_COLORS, STATUS_COLORS, getYieldStatus, arrLastFloat } from '../../lib/analyticsService'
 import './Analytics.css'
 
 export default function Analytics() {
@@ -70,14 +70,14 @@ export default function Analytics() {
                 data.clusters?.forEach((c) => {
                     const harvests = c.allHarvests || []
                     harvests.forEach(h => {
-                        totalYield += parseFloat(h.yield_kg || 0)
-                        gradeFine += parseFloat(h.grade_fine || 0)
-                        gradePremium += parseFloat(h.grade_premium || 0)
-                        gradeCommercial += parseFloat(h.grade_commercial || 0)
+                        totalYield += arrLastFloat(h.yield_kg)
+                        gradeFine += arrLastFloat(h.grade_fine)
+                        gradePremium += arrLastFloat(h.grade_premium)
+                        gradeCommercial += arrLastFloat(h.grade_commercial)
                     })
 
                     // Check for yield drop vs previous
-                    const currentYield = c.latestHarvest?.yield_kg || 0
+                    const currentYield = arrLastFloat(c.latestHarvest?.yield_kg)
                     const previousYield = c.stageData?.pre_yield_kg || 0
                     if (previousYield > 0) {
                         totalWithPrevious++
