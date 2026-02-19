@@ -35,7 +35,7 @@ export function AuthProvider({ children }) {
   const fetchProfile = async (userId) => {
     try {
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Profile fetch timeout')), 3000)
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
       )
 
       const fetchPromise = supabase
@@ -160,10 +160,10 @@ export function AuthProvider({ children }) {
           if (session?.user) {
             setUser(session.user)
             const p = await fetchProfile(session.user.id)
-            if (isMounted) {
+            if (isMounted && p) {
               setProfile(p)
+              saveUserSession(session.user, p)
             }
-            if (p) saveUserSession(session.user, p)
           }
         } else if (event === 'SIGNED_OUT') {
           setUser(null)
