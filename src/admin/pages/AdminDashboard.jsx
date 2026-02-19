@@ -17,6 +17,7 @@ import {
     ArrowDownRight,
     X,
 } from 'lucide-react'
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
     ResponsiveContainer, PieChart, Pie, Cell,
@@ -44,6 +45,12 @@ export default function AdminDashboard() {
     const [sortDir, setSortDir] = useState('desc')
     const [selectedRows, setSelectedRows] = useState([])
     const [loading, setLoading] = useState(true)
+
+    // Dialog states
+    const [bulkActionDialog, setBulkActionDialog] = useState({ open: false, action: '', count: 0 })
+    const [assignDialog, setAssignDialog] = useState({ open: false, clusterName: '' })
+    const [notifyDialog, setNotifyDialog] = useState({ open: false, clusterName: '' })
+    const [exportDialog, setExportDialog] = useState(false)
 
     useEffect(() => {
         fetchDashboardData()
@@ -217,14 +224,40 @@ export default function AdminDashboard() {
     }
 
     const handleBulkAction = (action) => {
-        addAuditLog(`Bulk action: ${action} on ${selectedRows.length} cluster(s)`)
-        alert(`${action} applied to ${selectedRows.length} cluster(s)`)
+        setBulkActionDialog({ open: true, action, count: selectedRows.length })
+    }
+
+    const doBulkAction = () => {
+        addAuditLog(`Bulk action: ${bulkActionDialog.action} on ${bulkActionDialog.count} cluster(s)`)
         setSelectedRows([])
+        setBulkActionDialog({ open: false, action: '', count: 0 })
+    }
+
+    const handleAssign = (farm) => {
+        setAssignDialog({ open: true, clusterName: farm.clusterName })
+    }
+
+    const doAssign = () => {
+        addAuditLog(`Assigned task for: ${assignDialog.clusterName}`)
+        setAssignDialog({ open: false, clusterName: '' })
+    }
+
+    const handleNotify = (farm) => {
+        setNotifyDialog({ open: true, clusterName: farm.clusterName })
+    }
+
+    const doNotify = () => {
+        addAuditLog(`Notified farmer for: ${notifyDialog.clusterName}`)
+        setNotifyDialog({ open: false, clusterName: '' })
     }
 
     const handleExportReport = () => {
+        setExportDialog(true)
+    }
+
+    const doExport = () => {
         addAuditLog('Exported KPI report')
-        alert('KPI report export initiated (CSV)')
+        setExportDialog(false)
     }
 
     const yieldDiff = stats.actualYield - stats.predictedYield
@@ -443,10 +476,10 @@ export default function AdminDashboard() {
                                             <button className="admin-action-btn" onClick={() => { setSelectedCluster(farm); addAuditLog(`Viewed cluster: ${farm.clusterName}`) }}>
                                                 <Eye size={14} /> View
                                             </button>
-                                            <button className="admin-action-btn admin-action-btn--warn" onClick={() => { addAuditLog(`Assigned task for: ${farm.clusterName}`); alert(`Task assigned for ${farm.clusterName}`) }}>
+                                            <button className="admin-action-btn admin-action-btn--warn" onClick={() => handleAssign(farm)}>
                                                 <ClipboardList size={14} /> Assign
                                             </button>
-                                            <button className="admin-action-btn admin-action-btn--info" onClick={() => { addAuditLog(`Notified farmer for: ${farm.clusterName}`); alert(`Farmer notified for ${farm.clusterName}`) }}>
+                                            <button className="admin-action-btn admin-action-btn--info" onClick={() => handleNotify(farm)}>
                                                 <Bell size={14} /> Notify
                                             </button>
                                         </td>
@@ -571,6 +604,54 @@ export default function AdminDashboard() {
                     ))}
                 </div>
             </div>
+
+            {/* Bulk Action Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={bulkActionDialog.open}
+                onClose={() => setBulkActionDialog({ open: false, action: '', count: 0 })}
+                onConfirm={doBulkAction}
+                title={`${bulkActionDialog.action}?`}
+                message={`Apply "${bulkActionDialog.action}" to ${bulkActionDialog.count} selected cluster(s)?`}
+                confirmText="Confirm"
+                cancelText="Cancel"
+                variant="warning"
+            />
+
+            {/* Assign Task Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={assignDialog.open}
+                onClose={() => setAssignDialog({ open: false, clusterName: '' })}
+                onConfirm={doAssign}
+                title="Assign Task"
+                message={`Assign a task for cluster "${assignDialog.clusterName}"?`}
+                confirmText="Assign"
+                cancelText="Cancel"
+                variant="success"
+            />
+
+            {/* Notify Farmer Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={notifyDialog.open}
+                onClose={() => setNotifyDialog({ open: false, clusterName: '' })}
+                onConfirm={doNotify}
+                title="Notify Farmer"
+                message={`Send a notification to the farmer for cluster "${notifyDialog.clusterName}"?`}
+                confirmText="Send Notification"
+                cancelText="Cancel"
+                variant="success"
+            />
+
+            {/* Export Report Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={exportDialog}
+                onClose={() => setExportDialog(false)}
+                onConfirm={doExport}
+                title="Export Report"
+                message="Export the KPI dashboard report as CSV? This will include all current stats and critical farm data."
+                confirmText="Export CSV"
+                cancelText="Cancel"
+                variant="success"
+            />
         </div>
     )
 }

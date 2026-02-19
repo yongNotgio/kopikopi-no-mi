@@ -253,46 +253,8 @@ export function AuthProvider({ children }) {
     return { success: true, requiresConfirmation }
   }
 
-  const registerAdmin = async (userData) => {
-    setError('')
-
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: userData.email,
-      password: userData.password,
-    })
-
-    if (authError) { setError(authError.message); return false }
-
-    const userId = authData.user?.id
-    if (!userId) { setError('Registration failed. Please try again.'); return false }
-
-    const { data: existingEmail } = await supabase.from('users').select('id').eq('email', userData.email).maybeSingle()
-    if (existingEmail) { setError('An account with this email already exists.'); return false }
-
-    const { data: takenUsername } = await supabase.from('users').select('id').eq('username', userData.username).maybeSingle()
-    if (takenUsername) { setError('Username is already taken.'); return false }
-
-    const { error: profileError } = await supabase.from('users').upsert({
-      id: userId,
-      username: userData.username,
-      email: userData.email,
-      password_hash: 'supabase-auth-managed',
-      first_name: userData.firstName,
-      last_name: userData.lastName,
-      middle_initial: userData.middleInitial || null,
-      contact_number: userData.contactNumber,
-      age: parseInt(userData.age),
-      municipality: userData.municipality,
-      province: userData.province,
-      role: 'admin',
-    }, { onConflict: 'id' })
-
-    if (profileError) { setError(profileError.message); return false }
-    return true
-  }
-
-  // ===== Login with STRICT Role Verification =====
-  const login = async (identifier, password, expectedRole) => {
+  // ===== Login =====
+  const login = async (identifier, password) => {
     setError('')
 
     try {
@@ -329,14 +291,9 @@ export function AuthProvider({ children }) {
         return { success: false }
       }
 
-      // STEP 2: STRICT ROLE CHECK — database role column is KING
       const dbRole = profileData.role || 'farmer'
-      if (expectedRole && dbRole !== expectedRole) {
-        setError('⚠️ Invalid credentials for this login type. Please check your username and password, or try the other login option.')
-        return { success: false }
-      }
 
-      // STEP 3: Authenticate with Supabase
+      // Authenticate with Supabase
       const { error: loginError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -433,7 +390,6 @@ export function AuthProvider({ children }) {
         error,
         setError,
         register,
-        registerAdmin,
         login,
         logout,
         updateProfile,

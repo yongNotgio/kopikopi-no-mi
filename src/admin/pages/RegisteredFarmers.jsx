@@ -12,6 +12,7 @@ import {
     Save,
     AlertTriangle,
 } from 'lucide-react'
+import ConfirmDialog from '../../components/ConfirmDialog/ConfirmDialog'
 import './RegisteredFarmers.css'
 
 const PAGE_SIZE = 10
@@ -24,11 +25,16 @@ export default function RegisteredFarmers() {
     const [showModal, setShowModal] = useState(false)
     const [editFarmer, setEditFarmer] = useState(null)
     const [deleteConfirm, setDeleteConfirm] = useState(null)
+    const [showSaveConfirm, setShowSaveConfirm] = useState(false)
+    const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
+    const [isDirty, setIsDirty] = useState(false)
     const [formData, setFormData] = useState({
         username: '', email: '', first_name: '', last_name: '', middle_initial: '',
         contact_number: '', age: '', municipality: '', province: '', password: '',
     })
+    const [initialFormData, setInitialFormData] = useState(null)
     const [formError, setFormError] = useState('')
+    const [successMessage, setSuccessMessage] = useState('')
 
     useEffect(() => {
         fetchFarmers()
@@ -88,17 +94,21 @@ export default function RegisteredFarmers() {
 
     const openAddModal = () => {
         setEditFarmer(null)
-        setFormData({
+        const empty = {
             username: '', email: '', first_name: '', last_name: '', middle_initial: '',
             contact_number: '', age: '', municipality: '', province: '', password: '',
-        })
+        }
+        setFormData(empty)
+        setInitialFormData(empty)
+        setIsDirty(false)
         setFormError('')
+        setSuccessMessage('')
         setShowModal(true)
     }
 
     const openEditModal = (farmer) => {
         setEditFarmer(farmer)
-        setFormData({
+        const data = {
             username: farmer.username,
             email: farmer.email,
             first_name: farmer.first_name,
@@ -109,14 +119,23 @@ export default function RegisteredFarmers() {
             municipality: farmer.municipality,
             province: farmer.province,
             password: '',
-        })
+        }
+        setFormData(data)
+        setInitialFormData(data)
+        setIsDirty(false)
         setFormError('')
+        setSuccessMessage('')
         setShowModal(true)
     }
 
     const handleFormChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value })
+        const updated = { ...formData, [e.target.name]: e.target.value }
+        setFormData(updated)
         setFormError('')
+        // Track dirty state
+        if (initialFormData) {
+            setIsDirty(JSON.stringify(updated) !== JSON.stringify(initialFormData))
+        }
     }
 
     const handleSave = async (e) => {
@@ -135,7 +154,12 @@ export default function RegisteredFarmers() {
             setFormError('Age must be between 18 and 120.')
             return
         }
+        // Show save confirmation dialog
+        setShowSaveConfirm(true)
+    }
 
+    const doSave = async () => {
+        const age = parseInt(formData.age)
         try {
             if (editFarmer) {
                 // Update existing
@@ -180,22 +204,35 @@ export default function RegisteredFarmers() {
                 if (profileErr) throw profileErr
             }
 
-            setShowModal(false)
-            fetchFarmers()
+            setSuccessMessage(editFarmer ? 'Farmer updated successfully!' : 'Farmer created successfully!')
+            setTimeout(() => {
+                setShowModal(false)
+                setSuccessMessage('')
+                fetchFarmers()
+            }, 1500)
         } catch (err) {
             setFormError(err.message)
         }
     }
 
-    const handleDelete = async (farmer) => {
+    const handleCloseModal = () => {
+        if (isDirty) {
+            setShowDiscardConfirm(true)
+        } else {
+            setShowModal(false)
+        }
+    }
+
+    const handleDelete = async () => {
+        if (!deleteConfirm) return
         try {
-            const { error } = await supabase.from('users').delete().eq('id', farmer.id)
+            const { error } = await supabase.from('users').delete().eq('id', deleteConfirm.id)
             if (error) throw error
             setDeleteConfirm(null)
             fetchFarmers()
         } catch (err) {
             console.error('Delete error:', err)
-            alert('Failed to delete farmer: ' + err.message)
+            setFormError('Failed to delete farmer: ' + err.message)
         }
     }
 
@@ -339,15 +376,16 @@ export default function RegisteredFarmers() {
 
             {/* Add/Edit Modal */}
             {showModal && (
-                <div className="admin-modal-overlay" onClick={() => setShowModal(false)}>
+                <div className="admin-modal-overlay" onClick={handleCloseModal}>
                     <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
                         <div className="admin-modal-header">
                             <h2>{editFarmer ? 'Edit Farmer' : 'Add New Farmer'}</h2>
-                            <button className="admin-modal-close" onClick={() => setShowModal(false)}>
+                            <button className="admin-modal-close" onClick={handleCloseModal}>
                                 <X size={20} />
                             </button>
                         </div>
                         <form className="farmer-form" onSubmit={handleSave}>
+                            {successMessage && <div className="farmer-form-success">{successMessage}</div>}
                             {formError && <div className="farmer-form-error">{formError}</div>}
                             <div className="farmer-form-grid">
                                 <div className="farmer-form-field">
@@ -394,7 +432,7 @@ export default function RegisteredFarmers() {
                                 </div>
                             </div>
                             <div className="farmer-form-actions">
-                                <button type="button" className="farmer-cancel-btn" onClick={() => setShowModal(false)}>Cancel</button>
+                                <button type="button" className="farmer-cancel-btn" onClick={handleCloseModal}>Cancel</button>
                                 <button type="submit" className="farmer-save-btn">
                                     <Save size={16} /> {editFarmer ? 'Update' : 'Create'} Farmer
                                 </button>
@@ -404,20 +442,44 @@ export default function RegisteredFarmers() {
                 </div>
             )}
 
-            {/* Delete Confirmation */}
-            {deleteConfirm && (
-                <div className="admin-modal-overlay" onClick={() => setDeleteConfirm(null)}>
-                    <div className="delete-confirm-modal" onClick={(e) => e.stopPropagation()}>
-                        <AlertTriangle size={40} color="#ef4444" />
-                        <h3>Delete Farmer</h3>
-                        <p>Are you sure you want to delete <strong>{deleteConfirm.first_name} {deleteConfirm.last_name}</strong>? This will also delete their farm and all cluster data. This action cannot be undone.</p>
-                        <div className="delete-confirm-actions">
-                            <button className="farmer-cancel-btn" onClick={() => setDeleteConfirm(null)}>Cancel</button>
-                            <button className="farmer-delete-confirm-btn" onClick={() => handleDelete(deleteConfirm)}>Delete</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Save Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={showSaveConfirm}
+                onClose={() => setShowSaveConfirm(false)}
+                onConfirm={doSave}
+                title={editFarmer ? 'Update Farmer?' : 'Add New Farmer?'}
+                message={editFarmer
+                    ? `Save changes to ${formData.first_name} ${formData.last_name}'s profile?`
+                    : `Create a new farmer account for ${formData.first_name} ${formData.last_name}?`
+                }
+                confirmText={editFarmer ? 'Update' : 'Create'}
+                cancelText="Go Back"
+                variant="success"
+            />
+
+            {/* Discard Changes Dialog */}
+            <ConfirmDialog
+                isOpen={showDiscardConfirm}
+                onClose={() => setShowDiscardConfirm(false)}
+                onConfirm={() => { setShowModal(false); setShowDiscardConfirm(false) }}
+                title="Discard Changes?"
+                message="You have unsaved changes. Are you sure you want to close this form? All changes will be lost."
+                confirmText="Discard"
+                cancelText="Keep Editing"
+                variant="warning"
+            />
+
+            {/* Delete Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={!!deleteConfirm}
+                onClose={() => setDeleteConfirm(null)}
+                onConfirm={handleDelete}
+                title="Delete Farmer"
+                message={deleteConfirm ? `Are you sure you want to delete ${deleteConfirm.first_name} ${deleteConfirm.last_name}? This will also delete their farm and all cluster data. This action cannot be undone.` : ''}
+                confirmText="Delete"
+                cancelText="Cancel"
+                variant="danger"
+            />
         </div>
     )
 }

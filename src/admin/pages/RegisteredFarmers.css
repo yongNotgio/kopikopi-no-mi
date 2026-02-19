@@ -235,6 +235,16 @@
     border: 1px solid #fecaca;
 }
 
+.farmer-form-success {
+    background: #f0fdf4;
+    color: #16a34a;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    border: 1px solid #bbf7d0;
+}
+
 .farmer-form-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
