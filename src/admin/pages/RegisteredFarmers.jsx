@@ -46,22 +46,43 @@ export default function RegisteredFarmers() {
             // Fetch users with their farms and clusters
             const { data: users, error } = await supabase
                 .from('users')
-                .select('*, farms(id, farm_name, farm_area, clusters(id))')
+                .select(`
+                    *,
+                    farms (
+                        id,
+                        farm_name,
+                        farm_area,
+                        overall_tree_count,
+                        elevation_m,
+                        clusters (id)
+                    )
+                `)
                 .eq('role', 'farmer')
                 .order('created_at', { ascending: false })
 
             if (error) throw error
 
             const enriched = users?.map((u) => {
-                const farm = u.farms?.[0]
-                const clusterCount = farm?.clusters?.length || 0
+                // Handle both array and object farm data (Supabase may return either)
+                const farm = Array.isArray(u.farms) ? u.farms[0] : u.farms
+                const clusters = farm?.clusters || []
+                const clusterCount = Array.isArray(clusters) ? clusters.length : 0
+                
                 // Determine status based on available data
                 let status = 'Healthy'
-                if (clusterCount === 0) status = 'No Clusters'
+                if (!farm) {
+                    status = 'No Farm'
+                } else if (clusterCount === 0) {
+                    status = 'No Clusters'
+                } else if (clusterCount > 0) {
+                    status = 'Healthy'
+                }
+                
                 return {
                     ...u,
                     farmName: farm?.farm_name || 'No Farm',
                     farmArea: farm?.farm_area || 0,
+                    farmId: farm?.id || null,
                     clusterCount,
                     status,
                 }
@@ -70,6 +91,7 @@ export default function RegisteredFarmers() {
             setFarmers(enriched)
         } catch (err) {
             console.error('Error fetching farmers:', err)
+            setFarmers([])
         }
         setLoading(false)
     }

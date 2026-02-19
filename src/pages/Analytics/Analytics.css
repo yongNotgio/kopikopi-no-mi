@@ -387,6 +387,80 @@
     line-height: 1.5;
 }
 
+/* ===== YIELD STATUS SECTION ===== */
+.analytics-status-section {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    border: 1px solid #f1f5f9;
+}
+
+.analytics-status-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 16px;
+}
+
+.analytics-status-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+
+.analytics-status-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border-radius: 10px;
+    background: #f8fafc;
+    border: 1px solid #f1f5f9;
+}
+
+.analytics-status-card.critical {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #dc2626;
+}
+
+.analytics-status-card.moderate {
+    background: #fff7ed;
+    border-color: #fed7aa;
+    color: #ea580c;
+}
+
+.analytics-status-card.stable {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+    color: #16a34a;
+}
+
+.analytics-status-card.improvement {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #2563eb;
+}
+
+.analytics-status-card div {
+    display: flex;
+    flex-direction: column;
+}
+
+.analytics-status-card span {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    opacity: 0.85;
+}
+
+.analytics-status-card strong {
+    font-size: 22px;
+    font-weight: 700;
+}
+
 /* ===== LOADING STATE ===== */
 .analytics-loading {
     display: flex;
@@ -447,6 +521,10 @@
     .analytics-cluster-stats {
         grid-template-columns: repeat(3, 1fr);
     }
+    
+    .analytics-status-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 @media (max-width: 480px) {
@@ -456,5 +534,9 @@
     
     .analytics-cluster-stats {
         grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .analytics-status-grid {
+        grid-template-columns: 1fr;
     }
 }

@@ -61,14 +61,48 @@ export async function fetchAdminAnalytics() {
     // Fetch all farms with user data
     const { data: farms, error: farmsErr } = await supabase
       .from('farms')
-      .select('*, users!inner(*)')
+      .select(`
+        *,
+        users (
+          id,
+          username,
+          email,
+          first_name,
+          last_name,
+          middle_initial,
+          contact_number,
+          age,
+          municipality,
+          province,
+          role
+        )
+      `)
 
     if (farmsErr) throw farmsErr
 
-    // Fetch all clusters with farm data and stage data
+    // Fetch all clusters with farm and user data
     const { data: clusters, error: clustersErr } = await supabase
       .from('clusters')
-      .select('*, farms!inner(*, users!inner(*)), cluster_stage_data(*)')
+      .select(`
+        *,
+        farms (
+          *,
+          users (
+            id,
+            username,
+            email,
+            first_name,
+            last_name,
+            middle_initial,
+            contact_number,
+            age,
+            municipality,
+            province,
+            role
+          )
+        ),
+        cluster_stage_data (*)
+      `)
 
     if (clustersErr) throw clustersErr
 
@@ -92,6 +126,10 @@ export async function fetchAdminAnalytics() {
         new Date(b.actual_harvest_date) - new Date(a.actual_harvest_date)
       )[0] || {}
 
+      // Handle both array and object farm data
+      const farm = Array.isArray(cluster.farms) ? cluster.farms[0] : cluster.farms
+      const farmer = farm?.users ? (Array.isArray(farm.users) ? farm.users[0] : farm.users) : null
+
       const risk = getRiskLevel(
         parseFloat(latestHarvest.yield_kg) || 0,
         parseFloat(latestStage.pre_yield_kg) || 0
@@ -99,8 +137,8 @@ export async function fetchAdminAnalytics() {
 
       return {
         ...cluster,
-        farm: cluster.farms,
-        farmer: cluster.farms?.users,
+        farm,
+        farmer,
         stageData: latestStage,
         latestHarvest,
         allHarvests: clusterHarvests,

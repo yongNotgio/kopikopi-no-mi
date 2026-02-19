@@ -14,9 +14,21 @@ import {
   X,
   RefreshCw,
   Download,
+  Info,
 } from 'lucide-react'
+import {
+  BarChart, Bar, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+} from 'recharts'
 import { fetchFarmerAnalytics, generateRecommendations, exportToCSV, ROBUSTA_IDEALS } from '../../lib/analyticsService'
 import './Recommendations.css'
+
+// Priority colors matching Streamlit
+const PRIORITY_COLORS = {
+  High: '#dc2626',
+  Medium: '#f97316',
+  Low: '#22c55e',
+}
 
 // Rules engine for identifying issues - enhanced to use DB data
 function analyzeCluster(cluster) {
@@ -26,7 +38,7 @@ function analyzeCluster(cluster) {
   // Check fertilizer
   if (!sd.fertilizerType && !sd.fertilizer_type) {
     issues.push({
-      factor: 'Insufficient fertilizer application',
+      factor: 'fertilizer_type',
       severity: 'high',
       explanation: 'No fertilizer type has been recorded. Coffee plants require regular fertilization for optimal yield.',
       recommendation: 'Apply NPK (14-14-14) fertilizer at the start of the rainy season. For mature trees, apply 200-300g per tree, 2-3 times per year.',
@@ -37,7 +49,7 @@ function analyzeCluster(cluster) {
   const pestFreq = sd.pesticideFrequency || sd.pesticide_frequency
   if (!pestFreq) {
     issues.push({
-      factor: 'Lack of pesticide use',
+      factor: 'pesticide_frequency',
       severity: 'medium',
       explanation: 'No pesticide application frequency recorded. Plants may be vulnerable to pest infestation.',
       recommendation: 'Conduct regular pest scouting. Apply approved insecticides for Coffee Berry Borer (CBB) prevention. Consider integrated pest management (IPM) practices.',
@@ -48,7 +60,7 @@ function analyzeCluster(cluster) {
   const lastPruned = sd.lastPrunedDate || sd.last_pruned_date
   if (!lastPruned) {
     issues.push({
-      factor: 'Delayed or missed pruning',
+      factor: 'pruning_interval',
       severity: 'medium',
       explanation: 'No pruning date recorded. Unpruned trees have reduced air circulation and light penetration.',
       recommendation: 'Prune coffee trees annually after harvest season. Remove dead, diseased, and crossing branches. Maintain optimal canopy shape for light exposure.',
@@ -57,12 +69,14 @@ function analyzeCluster(cluster) {
 
   // Check soil pH
   const pH = parseFloat(sd.soilPh || sd.soil_ph)
-  if (pH && (pH < ROBUSTA_IDEALS.soilPh.min || pH > ROBUSTA_IDEALS.soilPh.max)) {
+  if (pH && (pH < ROBUSTA_IDEALS.soil_ph.min || pH > ROBUSTA_IDEALS.soil_ph.max)) {
     issues.push({
-      factor: 'Extreme or imbalanced soil pH',
+      factor: 'soil_ph',
       severity: pH < 5.0 || pH > 7.0 ? 'high' : 'medium',
-      explanation: `Soil pH is ${pH}. Coffee thrives in slightly acidic soil (pH ${ROBUSTA_IDEALS.soilPh.min}-${ROBUSTA_IDEALS.soilPh.max}). Current pH may affect nutrient uptake.`,
-      recommendation: pH < ROBUSTA_IDEALS.soilPh.min
+      value: pH,
+      ideal: `${ROBUSTA_IDEALS.soil_ph.min}–${ROBUSTA_IDEALS.soil_ph.max}`,
+      explanation: `Soil pH is ${pH}. Coffee thrives in slightly acidic soil (pH ${ROBUSTA_IDEALS.soil_ph.min}-${ROBUSTA_IDEALS.soil_ph.max}). Current pH may affect nutrient uptake.`,
+      recommendation: pH < ROBUSTA_IDEALS.soil_ph.min
         ? 'Apply agricultural lime to raise soil pH. Test soil every 6 months to monitor changes.'
         : 'Apply sulfur or organic matter to lower soil pH. Ensure proper drainage to prevent alkalinity buildup.',
     })
@@ -72,83 +86,71 @@ function analyzeCluster(cluster) {
   const shadeTrees = sd.shadeTrees || sd.shade_trees
   if (shadeTrees === 'No' || shadeTrees === false) {
     issues.push({
-      factor: 'Poor shade tree management',
+      factor: 'shade_tree_present',
       severity: 'low',
+      value: 'absent',
+      ideal: 'present',
       explanation: 'No shade trees present. Shade trees help regulate temperature and improve bean quality.',
-      recommendation: 'Plant shade trees like Madre de Cacao (Gliricidia) or Ipil-Ipil at 6-8m spacing. Maintain 40-60% shade coverage for Arabica varieties.',
+      recommendation: 'Plant shade trees like Madre de Cacao (Gliricidia) or banana at 6-8m spacing. Maintain 40-60% shade coverage.',
     })
   }
 
   // Check temperature
-  const temp = parseFloat(sd.monthlyTemperature || sd.temperature)
-  if (temp && (temp < ROBUSTA_IDEALS.temperature.min || temp > ROBUSTA_IDEALS.temperature.max)) {
+  const temp = parseFloat(sd.monthlyTemperature || sd.temperature || sd.avg_temp_c)
+  if (temp && (temp < ROBUSTA_IDEALS.avg_temp_c.min || temp > ROBUSTA_IDEALS.avg_temp_c.max)) {
     issues.push({
-      factor: 'Weather or climate stress',
+      factor: 'avg_temp_c',
       severity: 'medium',
-      explanation: `Monthly temperature is ${temp}°C. Optimal range for coffee is ${ROBUSTA_IDEALS.temperature.min}-${ROBUSTA_IDEALS.temperature.max}°C.`,
-      recommendation: temp > ROBUSTA_IDEALS.temperature.max
+      value: temp,
+      ideal: `${ROBUSTA_IDEALS.avg_temp_c.min}–${ROBUSTA_IDEALS.avg_temp_c.max}`,
+      explanation: `Temperature is ${temp}°C. Optimal range for coffee is ${ROBUSTA_IDEALS.avg_temp_c.min}-${ROBUSTA_IDEALS.avg_temp_c.max}°C.`,
+      recommendation: temp > ROBUSTA_IDEALS.avg_temp_c.max
         ? 'Increase shade coverage. Consider mulching to reduce soil temperature. Plant windbreaks if exposed to hot winds.'
         : 'Protect young plants with covers during cold periods. Avoid planting in frost-prone areas.',
+    })
+  }
+
+  // Check humidity
+  const humidity = parseFloat(sd.humidity || sd.avg_humidity_pct)
+  if (humidity && (humidity < ROBUSTA_IDEALS.avg_humidity_pct.min || humidity > ROBUSTA_IDEALS.avg_humidity_pct.max)) {
+    issues.push({
+      factor: 'avg_humidity_pct',
+      severity: humidity < 40 || humidity > 90 ? 'high' : 'low',
+      value: humidity,
+      ideal: `${ROBUSTA_IDEALS.avg_humidity_pct.min}–${ROBUSTA_IDEALS.avg_humidity_pct.max}`,
+      explanation: `Average humidity is ${humidity}%. Optimal range is ${ROBUSTA_IDEALS.avg_humidity_pct.min}–${ROBUSTA_IDEALS.avg_humidity_pct.max}%.`,
+      recommendation: humidity < ROBUSTA_IDEALS.avg_humidity_pct.min
+        ? 'Increase mulching around plant bases to retain soil moisture.'
+        : 'Improve air circulation through pruning. Monitor for fungal diseases.',
+    })
+  }
+
+  // Check rainfall
+  const rainfall = parseFloat(sd.rainfall || sd.avg_rainfall_mm)
+  if (rainfall && (rainfall < ROBUSTA_IDEALS.avg_rainfall_mm.min || rainfall > ROBUSTA_IDEALS.avg_rainfall_mm.max)) {
+    issues.push({
+      factor: 'avg_rainfall_mm',
+      severity: rainfall < 50 || rainfall > 350 ? 'high' : 'medium',
+      value: rainfall,
+      ideal: `${ROBUSTA_IDEALS.avg_rainfall_mm.min}–${ROBUSTA_IDEALS.avg_rainfall_mm.max}`,
+      explanation: `Monthly rainfall is ${rainfall}mm. Coffee needs ${ROBUSTA_IDEALS.avg_rainfall_mm.min}–${ROBUSTA_IDEALS.avg_rainfall_mm.max}mm monthly.`,
+      recommendation: rainfall < ROBUSTA_IDEALS.avg_rainfall_mm.min
+        ? 'Consider supplemental irrigation during dry spells. Apply mulch to conserve moisture.'
+        : 'Ensure proper drainage to prevent waterlogging and root rot.',
     })
   }
 
   // Check yield decline
   const prevYield = parseFloat(sd.previousYield || sd.pre_yield_kg)
   const currentYield = parseFloat(sd.currentYield || sd.actual_yield)
-  if (prevYield && currentYield && currentYield < prevYield * 0.7) {
+  if (prevYield && currentYield && currentYield < prevYield * 0.8) {
     issues.push({
-      factor: 'Significant yield decline detected',
-      severity: 'high',
-      explanation: `Current yield (${currentYield}kg) is significantly lower than previous yield (${prevYield}kg). A decline of more than 30% warrants investigation.`,
-      recommendation: 'Conduct comprehensive soil testing. Review fertilizer program. Check for pest and disease presence. Evaluate pruning schedule and plant age.',
-    })
-  }
-
-  // Check humidity
-  const humidity = parseFloat(sd.humidity)
-  if (humidity && (humidity < ROBUSTA_IDEALS.humidity.min || humidity > ROBUSTA_IDEALS.humidity.max)) {
-    issues.push({
-      factor: 'Non-optimal humidity level',
-      severity: humidity < 40 || humidity > 85 ? 'high' : 'low',
-      explanation: `Average humidity is ${humidity}%. Optimal range for coffee is ${ROBUSTA_IDEALS.humidity.min}–${ROBUSTA_IDEALS.humidity.max}%.`,
-      recommendation: humidity < ROBUSTA_IDEALS.humidity.min
-        ? 'Increase mulching around plant bases to retain soil moisture. Consider installing shade structures to reduce evaporation.'
-        : 'Improve air circulation through pruning. Ensure adequate spacing between trees. Monitor for fungal diseases common in high-humidity conditions.',
-    })
-  }
-
-  // Check rainfall
-  const rainfall = parseFloat(sd.rainfall)
-  if (rainfall && (rainfall < ROBUSTA_IDEALS.rainfall.min || rainfall > ROBUSTA_IDEALS.rainfall.max)) {
-    issues.push({
-      factor: 'Abnormal rainfall levels',
-      severity: rainfall < 50 || rainfall > 350 ? 'high' : 'medium',
-      explanation: `Monthly rainfall is ${rainfall}mm. Coffee generally needs ${ROBUSTA_IDEALS.rainfall.min}–${ROBUSTA_IDEALS.rainfall.max}mm of monthly rainfall for healthy growth.`,
-      recommendation: rainfall < ROBUSTA_IDEALS.rainfall.min
-        ? 'Consider supplemental irrigation during dry spells. Apply mulch to conserve soil moisture.'
-        : 'Ensure proper drainage to prevent waterlogging and root rot. Check for erosion on slopes.',
-    })
-  }
-
-  // Check fertilizer frequency
-  const fertFreq = sd.fertilizerFrequency || sd.fertilizer_frequency
-  if (fertFreq === 'Never' || fertFreq === 'Rarely') {
-    issues.push({
-      factor: 'Infrequent fertilizer application',
-      severity: fertFreq === 'Never' ? 'high' : 'medium',
-      explanation: `Fertilizer application is "${fertFreq}". Inadequate fertilization leads to nutrient deficiency and reduced yields.`,
-      recommendation: 'Apply fertilizer at least once a year. Recommended schedule: NPK at start of rainy season, and organic compost mid-season. Increase to 3-4 times per year for mature bearing trees.',
-    })
-  }
-
-  // Check pesticide type missing
-  const pestType = sd.pesticideType || sd.pesticide_type
-  if (pestFreq && pestFreq !== 'Never' && !pestType) {
-    issues.push({
-      factor: 'Pesticide type not specified',
-      severity: 'low',
-      explanation: 'Pesticide application frequency is recorded but the type (Organic/Non-Organic) is not specified.',
-      recommendation: 'Record the pesticide type for better tracking. Consider switching to organic pesticides where possible for sustainable farming.',
+      factor: 'yield_decline',
+      severity: currentYield < prevYield * 0.7 ? 'high' : 'medium',
+      value: `${((1 - currentYield / prevYield) * 100).toFixed(0)}%`,
+      ideal: '< 5%',
+      explanation: `Current yield (${currentYield}kg) is significantly lower than previous (${prevYield}kg).`,
+      recommendation: 'Conduct comprehensive soil testing. Review fertilizer program. Check for pest/disease presence.',
     })
   }
 
@@ -173,6 +175,7 @@ export default function Recommendations() {
   const [selectedCluster, setSelectedCluster] = useState(null)
   const [loading, setLoading] = useState(true)
   const [dbClusters, setDbClusters] = useState([])
+  const [showIdealRanges, setShowIdealRanges] = useState(false)
 
   useEffect(() => {
     if (user?.id) {
@@ -201,16 +204,18 @@ export default function Recommendations() {
             predictedYield: sd.predicted_yield,
             currentYield: c.latestHarvest?.yield_kg || 0,
             previousYield: sd.pre_yield_kg,
-            temperature: sd.temperature,
-            humidity: sd.humidity,
-            rainfall: sd.rainfall,
+            temperature: sd.temperature || sd.avg_temp_c,
+            humidity: sd.humidity || sd.avg_humidity_pct,
+            rainfall: sd.rainfall || sd.avg_rainfall_mm,
             soil_ph: sd.soil_ph,
             fertilizer_type: sd.fertilizer_type,
             fertilizer_frequency: sd.fertilizer_frequency,
             pesticide_type: sd.pesticide_type,
             pesticide_frequency: sd.pesticide_frequency,
-            shade_trees: sd.shade_trees,
+            shade_trees: sd.shade_trees || sd.shade_tree_present,
             last_pruned_date: sd.last_pruned_date,
+            elevation_m: sd.elevation_m || data.farm?.elevation_m,
+            pruning_interval_months: sd.pruning_interval_months,
           },
         }
       }) || []
@@ -249,6 +254,72 @@ export default function Recommendations() {
     filtered = filtered.filter((c) => c.stageData?.harvestSeason?.includes(seasonFilter))
   }
 
+  // Aggregate all recommendations for charts
+  const allRecommendations = filtered.flatMap(c => 
+    c.issues.map(issue => ({
+      ...issue,
+      clusterName: c.clusterName,
+      priority: issue.severity === 'high' ? 'High' : issue.severity === 'medium' ? 'Medium' : 'Low',
+    }))
+  )
+
+  // Priority counts for metrics
+  const priorityCounts = {
+    High: allRecommendations.filter(r => r.priority === 'High').length,
+    Medium: allRecommendations.filter(r => r.priority === 'Medium').length,
+    Low: allRecommendations.filter(r => r.priority === 'Low').length,
+  }
+
+  // Build chart data: recommendations by factor
+  const factorCounts = {}
+  allRecommendations.forEach(rec => {
+    const factor = rec.factor
+    if (!factorCounts[factor]) {
+      factorCounts[factor] = { High: 0, Medium: 0, Low: 0 }
+    }
+    factorCounts[factor][rec.priority]++
+  })
+  const factorChartData = Object.entries(factorCounts).map(([factor, counts]) => ({
+    factor: factor.replace(/_/g, ' '),
+    High: counts.High,
+    Medium: counts.Medium,
+    Low: counts.Low,
+    total: counts.High + counts.Medium + counts.Low,
+  })).sort((a, b) => b.total - a.total)
+
+  // Priority pie chart data
+  const priorityPieData = Object.entries(priorityCounts)
+    .filter(([, count]) => count > 0)
+    .map(([priority, count]) => ({ name: priority, value: count }))
+
+  // Build radar chart data for selected cluster
+  const buildRadarData = (cluster) => {
+    if (!cluster) return []
+    const sd = cluster.stageData || {}
+    const features = [
+      { field: 'soil_ph', label: 'Soil pH', min: 4, max: 8 },
+      { field: 'temperature', label: 'Temp (°C)', min: 10, max: 35 },
+      { field: 'humidity', label: 'Humidity (%)', min: 50, max: 100 },
+      { field: 'rainfall', label: 'Rainfall (mm)', min: 50, max: 400 },
+    ]
+    
+    return features.map(f => {
+      const val = parseFloat(sd[f.field])
+      const ideal = ROBUSTA_IDEALS[f.field === 'temperature' ? 'avg_temp_c' : f.field === 'humidity' ? 'avg_humidity_pct' : f.field === 'rainfall' ? 'avg_rainfall_mm' : f.field]
+      const idealMid = ideal ? (ideal.min + ideal.max) / 2 : null
+      const normalizedVal = val ? ((val - f.min) / (f.max - f.min)) * 100 : null
+      const normalizedIdeal = idealMid ? ((idealMid - f.min) / (f.max - f.min)) * 100 : 50
+      return {
+        feature: f.label,
+        value: normalizedVal,
+        ideal: normalizedIdeal,
+        actual: val,
+      }
+    }).filter(d => d.value !== null)
+  }
+
+  const radarData = buildRadarData(selectedCluster)
+
   const perfConfig = {
     poor: { label: 'Poor', icon: TrendingDown, color: '#dc2626', bg: '#fef2f2' },
     moderate: { label: 'Moderate', icon: Minus, color: '#d97706', bg: '#fffbeb' },
@@ -258,25 +329,27 @@ export default function Recommendations() {
   const severityConfig = {
     high: { label: 'High', icon: AlertCircle, color: '#dc2626' },
     medium: { label: 'Medium', icon: AlertTriangle, color: '#d97706' },
-    low: { label: 'Low', icon: Lightbulb, color: '#3b82f6' },
+    low: { label: 'Low', icon: Lightbulb, color: '#22c55e' },
   }
 
-  const poorCount = clustersWithAnalysis.filter((c) => c.performance === 'poor').length
-  const moderateCount = clustersWithAnalysis.filter((c) => c.performance === 'moderate').length
-  const goodCount = clustersWithAnalysis.filter((c) => c.performance === 'good').length
-
   const handleExport = () => {
-    const exportData = filtered.map(c => ({
-      'Cluster': c.clusterName,
-      'Stage': c.plantStage,
-      'Performance': c.performance,
-      'Issues Count': c.issues.length,
-      'High Severity': c.issues.filter(i => i.severity === 'high').length,
-      'Medium Severity': c.issues.filter(i => i.severity === 'medium').length,
-      'Low Severity': c.issues.filter(i => i.severity === 'low').length,
+    const exportData = allRecommendations.map(rec => ({
+      'Cluster': rec.clusterName,
+      'Factor': rec.factor,
+      'Priority': rec.priority,
+      'Current Value': rec.value || 'N/A',
+      'Ideal Range': rec.ideal || 'N/A',
+      'Recommendation': rec.recommendation,
     }))
     exportToCSV(exportData, `recommendations_${new Date().toISOString().split('T')[0]}.csv`)
   }
+
+  // Ideal ranges table data
+  const idealRangesData = Object.entries(ROBUSTA_IDEALS).map(([key, range]) => ({
+    factor: key.replace(/_/g, ' '),
+    min: range.min,
+    max: range.max,
+  }))
 
   if (loading) {
     return (
@@ -291,8 +364,8 @@ export default function Recommendations() {
     <div className="reco-page">
       <div className="reco-header">
         <div>
-          <h1>Decision Support & Recommendations</h1>
-          <p>Actionable insights to improve yield and farm management</p>
+          <h1>Agronomic Recommendations</h1>
+          <p>Rule-based guidance aligned to Robusta ideal ranges</p>
         </div>
         <div className="harvest-filters">
           <button className="reco-refresh-btn" onClick={fetchData}>
@@ -311,57 +384,137 @@ export default function Recommendations() {
             </select>
             <ChevronDown size={14} />
           </div>
-          <div className="filter-select">
-            <Filter size={16} />
-            <select value={performanceFilter} onChange={(e) => setPerformanceFilter(e.target.value)}>
-              <option value="">All Performance</option>
-              <option value="poor">Poor / Declining</option>
-              <option value="moderate">Moderate</option>
-              <option value="good">Good</option>
-            </select>
-            <ChevronDown size={14} />
+        </div>
+      </div>
+
+      {/* Priority Summary Cards (Streamlit-style) */}
+      <div className="reco-priority-summary">
+        <div className="reco-priority-card priority-high">
+          <AlertCircle size={24} />
+          <div>
+            <span className="priority-count">{priorityCounts.High}</span>
+            <span className="priority-label">High Priority</span>
+          </div>
+        </div>
+        <div className="reco-priority-card priority-medium">
+          <AlertTriangle size={24} />
+          <div>
+            <span className="priority-count">{priorityCounts.Medium}</span>
+            <span className="priority-label">Medium Priority</span>
+          </div>
+        </div>
+        <div className="reco-priority-card priority-low">
+          <CheckCircle size={24} />
+          <div>
+            <span className="priority-count">{priorityCounts.Low}</span>
+            <span className="priority-label">Low Priority</span>
           </div>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="reco-summary">
-        <div className="reco-sum-card reco-sum-card--critical">
-          <AlertCircle size={20} />
-          <div>
-            <span className="reco-sum-value">{poorCount}</span>
-            <span className="reco-sum-label">Critical</span>
+      {/* Charts Section */}
+      {allRecommendations.length > 0 && (
+        <div className="reco-charts-grid">
+          {/* Recommendations by Factor - Bar Chart */}
+          <div className="reco-chart-card">
+            <h3>Recommendations by Factor</h3>
+            <p>Clusters affected by each issue type</p>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={factorChartData} layout="vertical" margin={{ left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis type="number" fontSize={11} tick={{ fill: '#64748b' }} />
+                <YAxis dataKey="factor" type="category" fontSize={10} width={100} tick={{ fill: '#64748b' }} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="High" stackId="a" fill={PRIORITY_COLORS.High} name="High" />
+                <Bar dataKey="Medium" stackId="a" fill={PRIORITY_COLORS.Medium} name="Medium" />
+                <Bar dataKey="Low" stackId="a" fill={PRIORITY_COLORS.Low} name="Low" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Priority Distribution - Pie Chart */}
+          <div className="reco-chart-card">
+            <h3>Priority Distribution</h3>
+            <p>Breakdown of recommendation urgency</p>
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={priorityPieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={90}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                >
+                  {priorityPieData.map((entry) => (
+                    <Cell key={entry.name} fill={PRIORITY_COLORS[entry.name]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
         </div>
-        <div className="reco-sum-card reco-sum-card--moderate">
-          <AlertTriangle size={20} />
-          <div>
-            <span className="reco-sum-value">{moderateCount}</span>
-            <span className="reco-sum-label">Moderate Issues</span>
-          </div>
+      )}
+
+      {/* Ideal Ranges Section */}
+      <div className="reco-ideal-section">
+        <div className="reco-ideal-header" onClick={() => setShowIdealRanges(!showIdealRanges)}>
+          <h3><Info size={18} /> Robusta Ideal Ranges</h3>
+          <ChevronDown size={18} className={showIdealRanges ? 'rotated' : ''} />
         </div>
-        <div className="reco-sum-card reco-sum-card--good">
-          <CheckCircle size={20} />
-          <div>
-            <span className="reco-sum-value">{goodCount}</span>
-            <span className="reco-sum-label">Performing Well</span>
+        {showIdealRanges && (
+          <div className="reco-ideal-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Factor</th>
+                  <th>Min</th>
+                  <th>Max</th>
+                </tr>
+              </thead>
+              <tbody>
+                {idealRangesData.map(row => (
+                  <tr key={row.factor}>
+                    <td>{row.factor}</td>
+                    <td>{row.min}</td>
+                    <td>{row.max}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Cluster List with Performance */}
+      {/* Cluster List with Recommendations */}
       <div className="reco-content">
         <div className="reco-list">
+          <div className="reco-list-header">
+            <h3>Clusters ({filtered.length})</h3>
+            <div className="filter-select small">
+              <select value={performanceFilter} onChange={(e) => setPerformanceFilter(e.target.value)}>
+                <option value="">All Status</option>
+                <option value="poor">Needs Attention</option>
+                <option value="moderate">Moderate</option>
+                <option value="good">Good</option>
+              </select>
+            </div>
+          </div>
           {filtered.length === 0 ? (
             <div className="reco-empty">
-              <Lightbulb size={48} />
-              <h3>No clusters to analyze</h3>
-              <p>Add clusters to get actionable recommendations</p>
+              <CheckCircle size={48} />
+              <h3>All clusters within ideal ranges</h3>
+              <p>No recommendations needed at this time</p>
             </div>
           ) : (
             filtered.map((cluster) => {
               const perf = perfConfig[cluster.performance]
               const PerfIcon = perf.icon
+              const highCount = cluster.issues.filter(i => i.severity === 'high').length
+              const medCount = cluster.issues.filter(i => i.severity === 'medium').length
               return (
                 <div
                   key={cluster.id}
@@ -369,27 +522,18 @@ export default function Recommendations() {
                   onClick={() => setSelectedCluster(cluster)}
                 >
                   <div className="reco-item-left">
-                    <div
-                      className="reco-perf-badge"
-                      style={{ background: perf.bg, color: perf.color }}
-                    >
+                    <div className="reco-perf-badge" style={{ background: perf.bg, color: perf.color }}>
                       <PerfIcon size={16} />
                     </div>
                     <div>
                       <h4>{cluster.clusterName}</h4>
-                      <span className="reco-farm-name">{cluster.plantStage}</span>
+                      <span className="reco-cluster-stage">{cluster.plantStage}</span>
                     </div>
                   </div>
                   <div className="reco-item-right">
-                    <span
-                      className="reco-perf-label"
-                      style={{ color: perf.color }}
-                    >
-                      {perf.label} Yield
-                    </span>
-                    <span className="reco-issue-count">
-                      {cluster.issues.length} issue{cluster.issues.length !== 1 ? 's' : ''}
-                    </span>
+                    {highCount > 0 && <span className="reco-badge high">{highCount} High</span>}
+                    {medCount > 0 && <span className="reco-badge medium">{medCount} Med</span>}
+                    <span className="reco-issue-count">{cluster.issues.length} total</span>
                   </div>
                 </div>
               )
@@ -397,17 +541,36 @@ export default function Recommendations() {
           )}
         </div>
 
-        {/* Detail Overlay */}
+        {/* Detail Panel */}
         {selectedCluster && (
           <div className="reco-detail">
             <div className="detail-header">
-              <h3>
-                <Lightbulb size={18} /> {selectedCluster.clusterName}
-              </h3>
+              <h3><Lightbulb size={18} /> {selectedCluster.clusterName}</h3>
               <button className="modal-close" onClick={() => setSelectedCluster(null)}>
                 <X size={18} />
               </button>
             </div>
+
+            {/* Radar Chart for Cluster vs Ideal */}
+            {radarData.length > 0 && (
+              <div className="reco-radar-section">
+                <h4>Cluster vs Ideal Ranges</h4>
+                <ResponsiveContainer width="100%" height={250}>
+                  <RadarChart data={radarData}>
+                    <PolarGrid />
+                    <PolarAngleAxis dataKey="feature" fontSize={11} />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} />
+                    <Radar name="Ideal" dataKey="ideal" stroke="#22c55e" fill="#22c55e" fillOpacity={0.3} />
+                    <Radar name="Actual" dataKey="value" stroke="#4A7C59" fill="#4A7C59" fillOpacity={0.5} />
+                    <Legend />
+                    <Tooltip formatter={(val, name, props) => {
+                      if (name === 'Actual') return [props.payload.actual, 'Actual Value']
+                      return [val.toFixed(0) + '%', name]
+                    }} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
 
             {selectedCluster.issues.length === 0 ? (
               <div className="reco-no-issues">
@@ -421,14 +584,20 @@ export default function Recommendations() {
                   const sev = severityConfig[issue.severity]
                   const SevIcon = sev.icon
                   return (
-                    <div key={idx} className="reco-issue-card">
+                    <div key={idx} className={`reco-issue-card priority-${issue.severity}`}>
                       <div className="issue-header">
                         <SevIcon size={16} style={{ color: sev.color }} />
-                        <span className="issue-factor">{issue.factor}</span>
-                        <span className="issue-severity" style={{ color: sev.color }}>
+                        <span className="issue-factor">{issue.factor.replace(/_/g, ' ')}</span>
+                        <span className="issue-severity" style={{ background: sev.color }}>
                           {sev.label}
                         </span>
                       </div>
+                      {issue.value && (
+                        <div className="issue-values">
+                          <span>Current: <strong>{issue.value}</strong></span>
+                          {issue.ideal && <span>Ideal: <strong>{issue.ideal}</strong></span>}
+                        </div>
+                      )}
                       <p className="issue-explanation">{issue.explanation}</p>
                       <div className="issue-reco">
                         <span className="reco-tag">Recommendation</span>

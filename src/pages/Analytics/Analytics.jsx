@@ -8,17 +8,17 @@ import {
     PieChart,
     RefreshCw,
     Download,
-    Leaf,
-    Droplet,
-    Thermometer,
+    Layers,
+    Coffee,
     AlertTriangle,
     CheckCircle,
+    Minus,
 } from 'lucide-react'
 import {
-    LineChart, Line, BarChart, Bar, PieChart as RechartPie, Pie, Cell,
+    BarChart, Bar, PieChart as RechartPie, Pie, Cell,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { fetchFarmerAnalytics, exportToCSV, GRADE_COLORS, generateRecommendations } from '../../lib/analyticsService'
+import { fetchFarmerAnalytics, exportToCSV, GRADE_COLORS, STATUS_COLORS, getYieldStatus } from '../../lib/analyticsService'
 import './Analytics.css'
 
 export default function Analytics() {
@@ -28,88 +28,111 @@ export default function Analytics() {
     const [analyticsData, setAnalyticsData] = useState({
         farm: null,
         clusters: [],
-        totalPredicted: 0,
-        totalActual: 0,
-        totalTrees: 0,
-        avgYieldPerTree: 0,
+        totalYield: 0,
+        totalClusters: 0,
+        avgFinePct: 0,
+        yieldDropRate: 0,
         yieldTrends: [],
         gradeDistribution: [],
-        clusterPerformance: [],
-        recommendations: [],
+        gradeBySeasonData: [],
+        yieldStatusCounts: {},
     })
-    const [selectedCluster, setSelectedCluster] = useState('all')
     const [refreshKey, setRefreshKey] = useState(0)
 
     useEffect(() => {
         if (!user?.id) return
-        
+
         let isMounted = true
-        
+
         const loadData = async () => {
             setLoading(true)
             try {
                 const data = await fetchFarmerAnalytics(user.id)
-                
+
                 if (!isMounted) return
-                
-                // Process clusters for performance stats
-                let totalPredicted = 0
-                let totalActual = 0
-            let totalTrees = 0
-            const clusterPerformance = []
-            let allRecommendations = []
-            
-            data.clusters?.forEach((c) => {
-                const sd = c.stageData || {}
-                const predicted = parseFloat(sd.predicted_yield || 0)
-                const actual = c.latestHarvest ? parseFloat(c.latestHarvest.yield_kg || 0) : 0
-                const trees = c.plant_count || 0
-                
-                totalPredicted += predicted
-                totalActual += actual
-                totalTrees += trees
-                
-                clusterPerformance.push({
-                    id: c.id,
-                    name: c.cluster_name,
-                    stage: c.plant_stage,
-                    predicted: Math.round(predicted),
-                    actual: Math.round(actual),
-                    trees,
-                    yieldPerTree: trees > 0 ? (actual / trees).toFixed(2) : 0,
-                    status: actual >= predicted * 0.9 ? 'good' : actual >= predicted * 0.7 ? 'moderate' : 'poor',
+
+                // Calculate total yield from harvests
+                let totalYield = 0
+                let gradeFine = 0
+                let gradePremium = 0
+                let gradeCommercial = 0
+                let yieldDropCount = 0
+                let totalWithPrevious = 0
+
+                // Yield status counts
+                const yieldStatusCounts = {
+                    'Critical Drop (>20%)': 0,
+                    'Moderate Drop (5-20%)': 0,
+                    'Stable (±5%)': 0,
+                    'Improvement (>5%)': 0,
+                }
+
+                data.clusters?.forEach((c) => {
+                    const harvests = c.allHarvests || []
+                    harvests.forEach(h => {
+                        totalYield += parseFloat(h.yield_kg || 0)
+                        gradeFine += parseFloat(h.grade_fine || 0)
+                        gradePremium += parseFloat(h.grade_premium || 0)
+                        gradeCommercial += parseFloat(h.grade_commercial || 0)
+                    })
+
+                    // Check for yield drop vs previous
+                    const currentYield = c.latestHarvest?.yield_kg || 0
+                    const previousYield = c.stageData?.pre_yield_kg || 0
+                    if (previousYield > 0) {
+                        totalWithPrevious++
+                        const status = getYieldStatus(currentYield, previousYield)
+                        if (yieldStatusCounts[status] !== undefined) {
+                            yieldStatusCounts[status]++
+                        }
+                        if (currentYield < previousYield * 0.95) {
+                            yieldDropCount++
+                        }
+                    }
                 })
-                
-                // Generate recommendations for each cluster
-                const clusterRecs = generateRecommendations(c)
-                allRecommendations = [...allRecommendations, ...clusterRecs.map(r => ({
-                    ...r,
-                    clusterName: c.cluster_name,
-                }))]
-            })
-            
-            if (!isMounted) return
-            
-            setAnalyticsData({
-                farm: data.farm,
-                clusters: data.clusters || [],
-                totalPredicted: Math.round(totalPredicted),
-                totalActual: Math.round(totalActual),
-                totalTrees,
-                avgYieldPerTree: totalTrees > 0 ? (totalActual / totalTrees).toFixed(2) : 0,
-                yieldTrends: data.yieldTrends || [],
-                gradeDistribution: data.gradeDistribution || [],
-                clusterPerformance,
-                recommendations: allRecommendations.slice(0, 10), // Top 10 recommendations
-            })
-        } catch (err) {
-            console.error('Error fetching analytics:', err)
+
+                // Calculate avg fine percentage
+                const totalGrade = gradeFine + gradePremium + gradeCommercial
+                const avgFinePct = totalGrade > 0 ? ((gradeFine / totalGrade) * 100).toFixed(1) : 0
+                const yieldDropRate = totalWithPrevious > 0 ? ((yieldDropCount / totalWithPrevious) * 100).toFixed(1) : 0
+
+                // Build grade distribution (total kg)
+                const gradeDistribution = [
+                    { name: 'Fine', value: Math.round(gradeFine) },
+                    { name: 'Premium', value: Math.round(gradePremium) },
+                    { name: 'Commercial', value: Math.round(gradeCommercial) },
+                ].filter(g => g.value > 0)
+
+                // Build grade by season data for stacked bar chart
+                const gradeBySeasonData = (data.yieldTrends || []).map(t => ({
+                    season: t.season,
+                    fine: t.fine || 0,
+                    premium: t.premium || 0,
+                    commercial: t.commercial || 0,
+                }))
+
+                if (!isMounted) return
+
+                setAnalyticsData({
+                    farm: data.farm,
+                    clusters: data.clusters || [],
+                    totalYield: Math.round(totalYield),
+                    totalClusters: data.clusters?.length || 0,
+                    avgFinePct,
+                    yieldDropRate,
+                    yieldTrends: data.yieldTrends || [],
+                    gradeDistribution,
+                    gradeBySeasonData,
+                    yieldStatusCounts,
+                })
+            } catch (err) {
+                console.error('Error fetching analytics:', err)
+            }
+            if (isMounted) setLoading(false)
         }
-        if (isMounted) setLoading(false)
-        }
-        
+
         loadData()
-        
+
         return () => { isMounted = false }
     }, [user?.id, refreshKey])
 
@@ -117,27 +140,23 @@ export default function Analytics() {
 
     const handleExport = () => {
         exportToCSV(
-            analyticsData.clusterPerformance.map(c => ({
-                'Cluster': c.name,
-                'Stage': c.stage,
-                'Trees': c.trees,
-                'Predicted Yield (kg)': c.predicted,
-                'Actual Yield (kg)': c.actual,
-                'Yield/Tree (kg)': c.yieldPerTree,
-                'Status': c.status,
+            analyticsData.yieldTrends.map(t => ({
+                'Season': t.season,
+                'Total Yield (kg)': t.actual,
+                'Fine (kg)': t.fine,
+                'Premium (kg)': t.premium,
+                'Commercial (kg)': t.commercial,
             })),
             `${farm?.farm_name || 'farm'}_analytics_${new Date().toISOString().split('T')[0]}.csv`
         )
     }
 
-    const filteredClusters = selectedCluster === 'all'
-        ? analyticsData.clusterPerformance
-        : analyticsData.clusterPerformance.filter(c => c.id === selectedCluster)
-
-    const yieldDiff = analyticsData.totalActual - analyticsData.totalPredicted
-    const yieldDiffPct = analyticsData.totalPredicted > 0
-        ? ((yieldDiff / analyticsData.totalPredicted) * 100).toFixed(1)
-        : 0
+    // Build yield status chart data
+    const yieldStatusData = Object.entries(analyticsData.yieldStatusCounts).map(([status, count]) => ({
+        status,
+        count,
+        fill: STATUS_COLORS[status] || '#94a3b8',
+    }))
 
     if (loading) {
         return (
@@ -165,57 +184,54 @@ export default function Analytics() {
                 </div>
             </div>
 
-            {/* KPI Cards */}
+            {/* KPI Cards - Matching Streamlit Overview */}
             <div className="analytics-kpi-grid">
                 <div className="analytics-kpi-card">
                     <div className="analytics-kpi-icon" style={{ background: '#ecfdf5' }}>
-                        <Leaf size={24} color="#059669" />
+                        <Coffee size={24} color="#059669" />
                     </div>
                     <div className="analytics-kpi-content">
-                        <span>Total Trees</span>
-                        <strong>{analyticsData.totalTrees.toLocaleString()}</strong>
+                        <span>Total Yield</span>
+                        <strong>{analyticsData.totalYield.toLocaleString()} kg</strong>
                     </div>
                 </div>
                 <div className="analytics-kpi-card">
                     <div className="analytics-kpi-icon" style={{ background: '#fef3c7' }}>
-                        <TrendingUp size={24} color="#d97706" />
+                        <Layers size={24} color="#d97706" />
                     </div>
                     <div className="analytics-kpi-content">
-                        <span>Predicted Yield</span>
-                        <strong>{analyticsData.totalPredicted.toLocaleString()} kg</strong>
+                        <span>Clusters</span>
+                        <strong>{analyticsData.totalClusters}</strong>
                     </div>
                 </div>
                 <div className="analytics-kpi-card">
-                    <div className="analytics-kpi-icon" style={{ background: '#eff6ff' }}>
-                        <BarChart3 size={24} color="#3b82f6" />
+                    <div className="analytics-kpi-icon" style={{ background: '#dcfce7' }}>
+                        <BarChart3 size={24} color="#16a34a" />
                     </div>
                     <div className="analytics-kpi-content">
-                        <span>Actual Yield</span>
-                        <strong>{analyticsData.totalActual.toLocaleString()} kg</strong>
-                        <span className={`analytics-kpi-change ${yieldDiff >= 0 ? 'positive' : 'negative'}`}>
-                            {yieldDiff >= 0 ? '+' : ''}{yieldDiffPct}%
-                        </span>
+                        <span>Avg Fine %</span>
+                        <strong>{analyticsData.avgFinePct}%</strong>
                     </div>
                 </div>
                 <div className="analytics-kpi-card">
-                    <div className="analytics-kpi-icon" style={{ background: '#f5f3ff' }}>
-                        <PieChart size={24} color="#8b5cf6" />
+                    <div className="analytics-kpi-icon" style={{ background: '#fef2f2' }}>
+                        <TrendingDown size={24} color="#dc2626" />
                     </div>
                     <div className="analytics-kpi-content">
-                        <span>Avg Yield/Tree</span>
-                        <strong>{analyticsData.avgYieldPerTree} kg</strong>
+                        <span>Yield Drop Rate</span>
+                        <strong>{analyticsData.yieldDropRate}%</strong>
                     </div>
                 </div>
             </div>
 
-            {/* Charts Section */}
+            {/* Charts Section - Row 1: Yield by Season + Grade Pie */}
             <div className="analytics-charts-grid">
-                {/* Yield Trends */}
+                {/* Total Yield per Season - Bar Chart (Streamlit Overview) */}
                 <div className="analytics-chart-card analytics-chart-wide">
-                    <h3><TrendingUp size={18} /> Yield Trends by Season</h3>
-                    <p>Predicted vs Actual yield performance</p>
+                    <h3><BarChart3 size={18} /> Total Yield per Season</h3>
+                    <p>Harvest yield totals across seasons</p>
                     <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={analyticsData.yieldTrends.length > 0 ? analyticsData.yieldTrends : [{ season: 'No Data', predicted: 0, actual: 0 }]}>
+                        <BarChart data={analyticsData.yieldTrends.length > 0 ? analyticsData.yieldTrends : [{ season: 'No Data', actual: 0 }]}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                             <XAxis dataKey="season" fontSize={12} tick={{ fill: '#64748b' }} />
                             <YAxis fontSize={12} tick={{ fill: '#64748b' }} tickFormatter={(v) => `${v} kg`} />
@@ -223,31 +239,19 @@ export default function Analytics() {
                                 contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
                                 formatter={(val) => [`${val.toLocaleString()} kg`]}
                             />
-                            <Legend />
-                            <Line
-                                type="monotone"
-                                dataKey="predicted"
-                                stroke="#f59e0b"
-                                strokeWidth={2}
-                                dot={{ r: 4, fill: '#f59e0b' }}
-                                name="Predicted"
-                            />
-                            <Line
-                                type="monotone"
-                                dataKey="actual"
-                                stroke="#3b82f6"
-                                strokeWidth={2}
-                                dot={{ r: 4, fill: '#3b82f6' }}
-                                name="Actual"
-                            />
-                        </LineChart>
+                            <Bar dataKey="actual" fill="#4A7C59" name="Total Yield (kg)" radius={[4, 4, 0, 0]}>
+                                {analyticsData.yieldTrends.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill="#4A7C59" />
+                                ))}
+                            </Bar>
+                        </BarChart>
                     </ResponsiveContainer>
                 </div>
 
-                {/* Grade Distribution */}
+                {/* Grade Distribution Pie (Streamlit Overview) */}
                 <div className="analytics-chart-card">
-                    <h3><PieChart size={18} /> Grade Distribution</h3>
-                    <p>Bean quality breakdown</p>
+                    <h3><PieChart size={18} /> Overall Grade Composition</h3>
+                    <p>Bean quality breakdown (kg)</p>
                     <ResponsiveContainer width="100%" height={250}>
                         <RechartPie>
                             <Pie
@@ -270,81 +274,83 @@ export default function Analytics() {
                 </div>
             </div>
 
-            {/* Cluster Performance */}
-            <div className="analytics-cluster-section">
-                <div className="analytics-section-header">
-                    <h3>Cluster Performance</h3>
-                    <select
-                        value={selectedCluster}
-                        onChange={(e) => setSelectedCluster(e.target.value === 'all' ? 'all' : e.target.value)}
-                        className="analytics-filter-select"
-                    >
-                        <option value="all">All Clusters</option>
-                        {analyticsData.clusters.map((c) => (
-                            <option key={c.id} value={c.id}>{c.cluster_name}</option>
-                        ))}
-                    </select>
+            {/* Charts Section - Row 2: Grade by Season + Yield Status */}
+            <div className="analytics-charts-grid">
+                {/* Grade % by Season - Stacked Bar (Streamlit Grade Distribution) */}
+                <div className="analytics-chart-card analytics-chart-wide">
+                    <h3><BarChart3 size={18} /> Grade Distribution by Season</h3>
+                    <p>Fine, Premium, and Commercial yields per season</p>
+                    <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={analyticsData.gradeBySeasonData.length > 0 ? analyticsData.gradeBySeasonData : [{ season: 'No Data', fine: 0, premium: 0, commercial: 0 }]}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                            <XAxis dataKey="season" fontSize={12} tick={{ fill: '#64748b' }} />
+                            <YAxis fontSize={12} tick={{ fill: '#64748b' }} tickFormatter={(v) => `${v} kg`} />
+                            <Tooltip
+                                contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
+                                formatter={(val) => [`${val.toLocaleString()} kg`]}
+                            />
+                            <Legend />
+                            <Bar dataKey="fine" stackId="a" fill="#1B5E20" name="Fine" />
+                            <Bar dataKey="premium" stackId="a" fill="#66BB6A" name="Premium" />
+                            <Bar dataKey="commercial" stackId="a" fill="#C8E6C9" name="Commercial" />
+                        </BarChart>
+                    </ResponsiveContainer>
                 </div>
 
-                <div className="analytics-cluster-grid">
-                    {filteredClusters.map((cluster) => (
-                        <div key={cluster.id} className={`analytics-cluster-card status-${cluster.status}`}>
-                            <div className="analytics-cluster-header">
-                                <h4>{cluster.name}</h4>
-                                <span className={`analytics-cluster-badge ${cluster.status}`}>
-                                    {cluster.status === 'good' && <CheckCircle size={14} />}
-                                    {cluster.status === 'moderate' && <AlertTriangle size={14} />}
-                                    {cluster.status === 'poor' && <TrendingDown size={14} />}
-                                    {cluster.status.charAt(0).toUpperCase() + cluster.status.slice(1)}
-                                </span>
-                            </div>
-                            <div className="analytics-cluster-stats">
-                                <div className="analytics-cluster-stat">
-                                    <span>Stage</span>
-                                    <strong>{cluster.stage || 'N/A'}</strong>
-                                </div>
-                                <div className="analytics-cluster-stat">
-                                    <span>Trees</span>
-                                    <strong>{cluster.trees.toLocaleString()}</strong>
-                                </div>
-                                <div className="analytics-cluster-stat">
-                                    <span>Predicted</span>
-                                    <strong>{cluster.predicted.toLocaleString()} kg</strong>
-                                </div>
-                                <div className="analytics-cluster-stat">
-                                    <span>Actual</span>
-                                    <strong>{cluster.actual.toLocaleString()} kg</strong>
-                                </div>
-                                <div className="analytics-cluster-stat">
-                                    <span>Yield/Tree</span>
-                                    <strong>{cluster.yieldPerTree} kg</strong>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
+                {/* Yield Status Distribution (Streamlit Yield Drop Detection) */}
+                <div className="analytics-chart-card">
+                    <h3><AlertTriangle size={18} /> Yield Status</h3>
+                    <p>Season-over-season yield comparison</p>
+                    <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={yieldStatusData} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                            <XAxis type="number" fontSize={12} tick={{ fill: '#64748b' }} />
+                            <YAxis dataKey="status" type="category" fontSize={10} tick={{ fill: '#64748b' }} width={120} />
+                            <Tooltip />
+                            <Bar dataKey="count" name="Clusters">
+                                {yieldStatusData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                ))}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
                 </div>
             </div>
 
-            {/* Recommendations */}
-            {analyticsData.recommendations.length > 0 && (
-                <div className="analytics-recommendations">
-                    <h3><AlertTriangle size={18} /> Recommendations</h3>
-                    <p>Action items to improve farm performance</p>
-                    <div className="analytics-rec-list">
-                        {analyticsData.recommendations.map((rec, idx) => (
-                            <div key={idx} className={`analytics-rec-item priority-${rec.priority}`}>
-                                <div className="analytics-rec-icon">
-                                    {rec.priority === 'high' ? <AlertTriangle size={16} /> : <CheckCircle size={16} />}
-                                </div>
-                                <div className="analytics-rec-content">
-                                    <strong>{rec.clusterName}</strong>
-                                    <p>{rec.message}</p>
-                                </div>
-                            </div>
-                        ))}
+            {/* Yield Status Metrics (Streamlit Yield Drop Detection) */}
+            <div className="analytics-status-section">
+                <h3>Yield Status Summary</h3>
+                <div className="analytics-status-grid">
+                    <div className="analytics-status-card critical">
+                        <TrendingDown size={20} />
+                        <div>
+                            <span>Critical Drop (&gt;20%)</span>
+                            <strong>{analyticsData.yieldStatusCounts['Critical Drop (>20%)'] || 0}</strong>
+                        </div>
+                    </div>
+                    <div className="analytics-status-card moderate">
+                        <TrendingDown size={20} />
+                        <div>
+                            <span>Moderate Drop (5-20%)</span>
+                            <strong>{analyticsData.yieldStatusCounts['Moderate Drop (5-20%)'] || 0}</strong>
+                        </div>
+                    </div>
+                    <div className="analytics-status-card stable">
+                        <Minus size={20} />
+                        <div>
+                            <span>Stable (±5%)</span>
+                            <strong>{analyticsData.yieldStatusCounts['Stable (±5%)'] || 0}</strong>
+                        </div>
+                    </div>
+                    <div className="analytics-status-card improvement">
+                        <TrendingUp size={20} />
+                        <div>
+                            <span>Improvement (&gt;5%)</span>
+                            <strong>{analyticsData.yieldStatusCounts['Improvement (>5%)'] || 0}</strong>
+                        </div>
                     </div>
                 </div>
-            )}
+            </div>
         </div>
     )
 }

@@ -336,121 +336,238 @@ export default function HarvestRecords() {
           ) : (
             <div className="detail-content">
               <div className="detail-header">
-                <h3>{selectedCluster.clusterName}</h3>
+                <div>
+                  <h3>{selectedCluster.clusterName}</h3>
+                  <span className="detail-cluster-id">ID: {selectedCluster.id.slice(-6)}</span>
+                </div>
                 <button className="modal-close" onClick={() => setSelectedCluster(null)}>
                   <X size={18} />
                 </button>
               </div>
 
-              {/* Cluster Info */}
+              {/* Key Metrics KPI Cards */}
+              <div className="detail-kpi-grid">
+                <div className="detail-kpi-card">
+                  <div className="kpi-icon" style={{ background: '#ecfdf5', color: '#059669' }}>
+                    <Coffee size={20} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-label">Tree Count</span>
+                    <strong className="kpi-value">{selectedCluster.plantCount || 0}</strong>
+                  </div>
+                </div>
+                <div className="detail-kpi-card">
+                  <div className="kpi-icon" style={{ background: '#fef3c7', color: '#d97706' }}>
+                    <TrendingUp size={20} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-label">Predicted Yield</span>
+                    <strong className="kpi-value">{selectedCluster.stageData?.predictedYield || '0'} kg</strong>
+                  </div>
+                </div>
+                <div className="detail-kpi-card">
+                  <div className="kpi-icon" style={{ background: '#eff6ff', color: '#3b82f6' }}>
+                    <BarChart3 size={20} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-label">Actual Yield</span>
+                    <strong className="kpi-value">{selectedCluster.stageData?.currentYield || '0'} kg</strong>
+                  </div>
+                </div>
+                <div className="detail-kpi-card">
+                  <div className="kpi-icon" style={{ background: '#f0fdf4', color: '#16a34a' }}>
+                    <Calendar size={20} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-label">Plant Age</span>
+                    <strong className="kpi-value">{getPlantAge(selectedCluster.stageData?.datePlanted)}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Yield & Forecast - Priority Section */}
+              <div className="detail-section detail-section-highlight">
+                <h4><TrendingUp size={16} /> Yield & Forecast</h4>
+                <div className="yield-summary-enhanced">
+                  <div className="yield-card-large">
+                    <div className="yield-card-header">
+                      <span className="yield-label">Previous Yield</span>
+                      <span className="yield-season">{selectedCluster.stageData?.harvestSeason || 'N/A'}</span>
+                    </div>
+                    <span className="yield-value-large">{selectedCluster.stageData?.previousYield || '0'}</span>
+                    <span className="yield-unit">kg</span>
+                  </div>
+                  <div className="yield-card-large yield-card-primary">
+                    <div className="yield-card-header">
+                      <span className="yield-label">Predicted Yield</span>
+                      <span className="yield-season">{selectedCluster.stageData?.harvestSeason || 'N/A'}</span>
+                    </div>
+                    <span className="yield-value-large">{selectedCluster.stageData?.predictedYield || '0'}</span>
+                    <span className="yield-unit">kg</span>
+                  </div>
+                  <div className="yield-card-large yield-card-success">
+                    <div className="yield-card-header">
+                      <span className="yield-label">Actual Yield</span>
+                      <span className="yield-season">{selectedCluster.stageData?.harvestSeason || 'N/A'}</span>
+                    </div>
+                    <span className="yield-value-large">{selectedCluster.stageData?.currentYield || '0'}</span>
+                    <span className="yield-unit">kg</span>
+                  </div>
+                </div>
+
+                {/* Grade Distribution */}
+                {(selectedCluster.stageData?.gradeFine || selectedCluster.stageData?.gradePremium || selectedCluster.stageData?.gradeCommercial) && (
+                  <div className="grade-breakdown">
+                    <h5>Grade Distribution</h5>
+                    <div className="grade-bars">
+                      <div className="grade-bar-item">
+                        <div className="grade-bar-header">
+                          <span className="grade-label">Fine</span>
+                          <span className="grade-value">{selectedCluster.stageData?.gradeFine || 0} kg</span>
+                        </div>
+                        <div className="grade-bar-bg">
+                          <div className="grade-bar-fill" style={{ width: `${((selectedCluster.stageData?.gradeFine || 0) / (selectedCluster.stageData?.currentYield || 1)) * 100}%`, background: '#1B5E20' }}></div>
+                        </div>
+                      </div>
+                      <div className="grade-bar-item">
+                        <div className="grade-bar-header">
+                          <span className="grade-label">Premium</span>
+                          <span className="grade-value">{selectedCluster.stageData?.gradePremium || 0} kg</span>
+                        </div>
+                        <div className="grade-bar-bg">
+                          <div className="grade-bar-fill" style={{ width: `${((selectedCluster.stageData?.gradePremium || 0) / (selectedCluster.stageData?.currentYield || 1)) * 100}%`, background: '#66BB6A' }}></div>
+                        </div>
+                      </div>
+                      <div className="grade-bar-item">
+                        <div className="grade-bar-header">
+                          <span className="grade-label">Commercial</span>
+                          <span className="grade-value">{selectedCluster.stageData?.gradeCommercial || 0} kg</span>
+                        </div>
+                        <div className="grade-bar-bg">
+                          <div className="grade-bar-fill" style={{ width: `${((selectedCluster.stageData?.gradeCommercial || 0) / (selectedCluster.stageData?.currentYield || 1)) * 100}%`, background: '#C8E6C9' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Cluster Information - Compact Grid */}
               <div className="detail-section">
-                <h4>Cluster Information</h4>
-                <div className="detail-info-grid">
-                  <div className="info-item">
-                    <span className="info-label">Cluster ID</span>
-                    <span className="info-value">{selectedCluster.id.slice(-6)}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">Tree Count</span>
-                    <span className="info-value">{selectedCluster.plantCount}</span>
-                  </div>
-                  <div className="info-item">
+                <h4><Layers size={16} /> Cluster Information</h4>
+                <div className="detail-info-grid-compact">
+                  <div className="info-item-compact">
                     <span className="info-label">Variety</span>
                     <span className="info-value">{selectedCluster.stageData?.variety || 'N/A'}</span>
                   </div>
-                  <div className="info-item">
+                  <div className="info-item-compact">
                     <span className="info-label">Date Planted</span>
                     <span className="info-value">{selectedCluster.stageData?.datePlanted || 'N/A'}</span>
                   </div>
-                  <div className="info-item">
-                    <span className="info-label">Plant Age</span>
-                    <span className="info-value">{getPlantAge(selectedCluster.stageData?.datePlanted)}</span>
-                  </div>
-                  <div className="info-item">
+                  <div className="info-item-compact">
                     <span className="info-label">Elevation (MASL)</span>
-                    <span className="info-value">{farm?.elevation || 'N/A'}</span>
+                    <span className="info-value">{farm?.elevation_m || 'N/A'}</span>
                   </div>
-                  <div className="info-item">
+                  <div className="info-item-compact">
                     <span className="info-label">Soil pH</span>
                     <span className="info-value">{selectedCluster.stageData?.soilPh || 'N/A'}</span>
                   </div>
-                  <div className="info-item">
+                  <div className="info-item-compact">
                     <span className="info-label">Shade Trees</span>
                     <span className="info-value">{selectedCluster.stageData?.shadeTrees || 'N/A'}</span>
                   </div>
-                </div>
-              </div>
-
-              {/* Dates & Seasons */}
-              <div className="detail-section">
-                <h4><Calendar size={16} /> Dates & Seasons</h4>
-                <div className="detail-info-grid">
-                  <div className="info-item">
+                  <div className="info-item-compact">
                     <span className="info-label">Season</span>
                     <span className="info-value">{selectedCluster.stageData?.harvestSeason || 'N/A'}</span>
                   </div>
-                  <div className="info-item">
-                    <span className="info-label">Est. Flowering Date</span>
-                    <span className="info-value">{selectedCluster.stageData?.estimatedFloweringDate || 'N/A'}</span>
+                </div>
+              </div>
+
+              {/* Dates & Phenology */}
+              <div className="detail-section">
+                <h4><Calendar size={16} /> Dates & Phenology</h4>
+                <div className="timeline-grid">
+                  <div className="timeline-item">
+                    <div className="timeline-dot"></div>
+                    <div>
+                      <span className="timeline-label">Est. Flowering Date</span>
+                      <span className="timeline-value">{selectedCluster.stageData?.estimatedFloweringDate || 'N/A'}</span>
+                    </div>
                   </div>
-                  <div className="info-item">
-                    <span className="info-label">Est. Harvest Date</span>
-                    <span className="info-value">{selectedCluster.stageData?.estimatedHarvestDate || 'N/A'}</span>
+                  <div className="timeline-item">
+                    <div className="timeline-dot"></div>
+                    <div>
+                      <span className="timeline-label">Est. Harvest Date</span>
+                      <span className="timeline-value">{selectedCluster.stageData?.estimatedHarvestDate || 'N/A'}</span>
+                    </div>
                   </div>
-                  <div className="info-item">
-                    <span className="info-label">Last Harvested</span>
-                    <span className="info-value">{selectedCluster.stageData?.lastHarvestedDate || 'N/A'}</span>
+                  <div className="timeline-item">
+                    <div className="timeline-dot"></div>
+                    <div>
+                      <span className="timeline-label">Last Harvested</span>
+                      <span className="timeline-value">{selectedCluster.stageData?.lastHarvestedDate || 'N/A'}</span>
+                    </div>
+                  </div>
+                  <div className="timeline-item">
+                    <div className="timeline-dot"></div>
+                    <div>
+                      <span className="timeline-label">Last Pruned</span>
+                      <span className="timeline-value">{selectedCluster.stageData?.lastPrunedDate || 'N/A'}</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Management Status */}
+              {/* Management Status - Compact */}
               <div className="detail-section">
-                <h4><Coffee size={16} /> Management Status</h4>
-                <div className="detail-info-grid">
-                  <div className="info-item">
-                    <span className="info-label">Fertilizer Type</span>
-                    <span className="info-value">{selectedCluster.stageData?.fertilizerType || 'N/A'}</span>
+                <h4><Coffee size={16} /> Management Practices</h4>
+                <div className="management-grid">
+                  <div className="management-card">
+                    <span className="management-category">Fertilizer</span>
+                    <div className="management-details">
+                      <span className="management-type">{selectedCluster.stageData?.fertilizerType || 'N/A'}</span>
+                      <span className="management-freq">{selectedCluster.stageData?.fertilizerFrequency || 'N/A'}</span>
+                    </div>
                   </div>
-                  <div className="info-item">
-                    <span className="info-label">Fertilizer Frequency</span>
-                    <span className="info-value">{selectedCluster.stageData?.fertilizerFrequency || 'N/A'}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">Pesticide Type</span>
-                    <span className="info-value">{selectedCluster.stageData?.pesticideType || 'N/A'}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">Pesticide Frequency</span>
-                    <span className="info-value">{selectedCluster.stageData?.pesticideFrequency || 'N/A'}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">Last Pruned</span>
-                    <span className="info-value">{selectedCluster.stageData?.lastPrunedDate || 'N/A'}</span>
+                  <div className="management-card">
+                    <span className="management-category">Pesticide</span>
+                    <div className="management-details">
+                      <span className="management-type">{selectedCluster.stageData?.pesticideType || 'N/A'}</span>
+                      <span className="management-freq">{selectedCluster.stageData?.pesticideFrequency || 'N/A'}</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Yield & Forecast Data */}
-              <div className="detail-section">
-                <h4>
-                  <TrendingUp size={16} /> Yield & Forecast
-                </h4>
-                <div className="yield-summary">
-                  <div className="yield-card">
-                    <span className="yield-label">Previous Yield</span>
-                    <span className="yield-value">{selectedCluster.stageData?.previousYield || '0'} kg</span>
-                  </div>
-                  <div className="yield-card yield-card--predicted">
-                    <span className="yield-label">Predicted Yield</span>
-                    <span className="yield-value">{selectedCluster.stageData?.predictedYield || '0'} kg</span>
-                  </div>
-                  <div className="yield-card yield-card--actual">
-                    <span className="yield-label">Actual Yield</span>
-                    <span className="yield-value">{selectedCluster.stageData?.currentYield || '0'} kg</span>
+              {/* Agro-climatic Data */}
+              {(selectedCluster.stageData?.temperature || selectedCluster.stageData?.rainfall || selectedCluster.stageData?.humidity) && (
+                <div className="detail-section">
+                  <h4><Mountain size={16} /> Agro-climatic Conditions</h4>
+                  <div className="climate-grid">
+                    <div className="climate-card">
+                      <span className="climate-icon">🌡️</span>
+                      <div>
+                        <span className="climate-label">Temperature</span>
+                        <span className="climate-value">{selectedCluster.stageData?.temperature || 'N/A'}°C</span>
+                      </div>
+                    </div>
+                    <div className="climate-card">
+                      <span className="climate-icon">🌧️</span>
+                      <div>
+                        <span className="climate-label">Rainfall</span>
+                        <span className="climate-value">{selectedCluster.stageData?.rainfall || 'N/A'} mm</span>
+                      </div>
+                    </div>
+                    <div className="climate-card">
+                      <span className="climate-icon">💧</span>
+                      <div>
+                        <span className="climate-label">Humidity</span>
+                        <span className="climate-value">{selectedCluster.stageData?.humidity || 'N/A'}%</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Charts */}
               <div className="detail-section">
